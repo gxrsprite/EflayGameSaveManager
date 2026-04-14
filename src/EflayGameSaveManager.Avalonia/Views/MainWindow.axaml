@@ -1,0 +1,208 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:EflayGameSaveManager.Avalonia.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="1280"
+        d:DesignHeight="860"
+        x:Class="EflayGameSaveManager.Avalonia.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/app.ico"
+        Background="#F5F7FA"
+        Title="Eflay Game Save Manager">
+
+    <Grid RowDefinitions="Auto,*" Margin="20">
+        <Border Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="18" Padding="18">
+            <StackPanel Spacing="12">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Eflay Game Save Manager" FontSize="28" FontWeight="Bold" Foreground="#1B2A3A"/>
+                        <TextBlock Text="{Binding StatusMessage}" Foreground="#5F7288"/>
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Margin="0,0,10,0"
+                            Content="Toggle Info"
+                            Command="{Binding ToggleHeaderCommand}" />
+                    <Button Grid.Column="2"
+                            Margin="0,0,10,0"
+                            Content="Refresh Cloud"
+                            MinWidth="150"
+                            Command="{Binding RefreshCloudStatusCommand}" />
+                    <Button Grid.Column="3"
+                            Margin="0,0,10,0"
+                            Content="Backup All To Cloud"
+                            MinWidth="180"
+                            Command="{Binding UploadAllBackupsToCloudCommand}" />
+                    <Button Grid.Column="4"
+                            Content="Reload"
+                            MinWidth="120"
+                            Command="{Binding ReloadCommand}" />
+                </Grid>
+
+                <Border IsVisible="{Binding IsHeaderExpanded}"
+                        Background="#F8FAFC"
+                        BorderBrush="#E2E8F0"
+                        BorderThickness="1"
+                        CornerRadius="14"
+                        Padding="14">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="{Binding Version, StringFormat=Config version: {0}}"/>
+                        <TextBlock Text="{Binding CurrentDeviceName, StringFormat=Current device: {0}}"/>
+                        <TextBlock Text="{Binding ConfigPath, StringFormat=Config: {0}}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding BackupPath, StringFormat=Backup root: {0}}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding LogPath, StringFormat=Log: {0}}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding CloudSummary}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="320,*" ColumnSpacing="18" Margin="0,18,0,0">
+            <Border Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="18" Padding="14">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Text="{Binding Games.Count, StringFormat=Games: {0}}" FontSize="16" FontWeight="SemiBold"/>
+                    <ListBox Grid.Row="1"
+                             Margin="0,12,0,0"
+                             ItemsSource="{Binding Games}"
+                             SelectedItem="{Binding SelectedGame}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:GameListItemViewModel">
+                                <Border Padding="12" Margin="0,0,0,8" Background="#F8FAFC" CornerRadius="12" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                        <TextBlock Text="{Binding CloudBadge}" Foreground="#5F7288"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="18" Padding="18">
+                <ScrollViewer>
+                    <StackPanel Spacing="16">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{Binding SelectedGameName}" FontSize="24" FontWeight="Bold" Foreground="#1B2A3A"/>
+                            <TextBlock Text="{Binding SelectedGameStats}" Foreground="#5F7288"/>
+                            <TextBlock Text="{Binding SelectedGameCloudState}" Foreground="#394B5A"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="Sync Current Save To Cloud"
+                                    Command="{Binding UploadSelectedGameCurrentSaveCommand}"
+                                    IsEnabled="{Binding SelectedGameCanSync}" />
+                            <Button Content="Restore From Cloud"
+                                    Command="{Binding RestoreSelectedGameCurrentSaveCommand}"
+                                    IsEnabled="{Binding SelectedGameCanSync}" />
+                            <Button Content="Run Game"
+                                    Command="{Binding RunCurrentGameCommand}"
+                                    IsEnabled="{Binding HasSelectedGame}" />
+                            <Button Content="Open Game Folder"
+                                    Command="{Binding OpenCurrentGameFolderCommand}"
+                                    IsEnabled="{Binding HasSelectedGame}" />
+                            <Button Content="Save Current Device Paths"
+                                    Command="{Binding SaveCurrentDevicePathsCommand}"
+                                    IsEnabled="{Binding HasSelectedGame}" />
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Save Paths" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                    <TextBlock Text="{Binding SelectedGameSaveSummary}" TextWrapping="Wrap" Foreground="#394B5A"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Executables" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                    <TextBlock Text="{Binding SelectedGameExecutableSummary}" TextWrapping="Wrap" Foreground="#394B5A"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Current Device Game Executable" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <TextBox Text="{Binding CurrentDeviceGamePath}" Watermark="Enter current device game executable path"/>
+                                    <Button Grid.Column="1"
+                                            Content="Open Folder"
+                                            Command="{Binding OpenCurrentGameFolderCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F5FBFF" BorderBrush="#B9D7EA" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <TextBlock Text="{Binding CloudBackups.Count, StringFormat=Cloud Backups: {0}}"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1B2A3A"/>
+                                    <Button Grid.Column="1"
+                                            Margin="0,0,8,0"
+                                            Content="Download Zip"
+                                            Command="{Binding DownloadSelectedCloudBackupZipCommand}"
+                                            IsEnabled="{Binding HasSelectedCloudBackup}" />
+                                    <Button Grid.Column="2"
+                                            Margin="0,0,8,0"
+                                            Content="Restore Selected"
+                                            Command="{Binding RestoreSelectedCloudBackupCommand}"
+                                            IsEnabled="{Binding HasSelectedCloudBackup}" />
+                                    <Button Grid.Column="3"
+                                            Content="Delete Selected"
+                                            Command="{Binding DeleteSelectedCloudBackupCommand}"
+                                            IsEnabled="{Binding HasSelectedCloudBackup}" />
+                                </Grid>
+
+                                <ListBox MaxHeight="220"
+                                         ItemsSource="{Binding CloudBackups}"
+                                         SelectedItem="{Binding SelectedCloudBackup}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:CloudBackupItemViewModel">
+                                            <Border Padding="10" Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="10">
+                                                <StackPanel Spacing="4">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding HeadBadge}" Foreground="#18794E"/>
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding Path}" TextWrapping="Wrap" Foreground="#5F7288"/>
+                                                    <TextBlock Text="{Binding Describe, StringFormat=Describe: {0}}" Foreground="#5F7288"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#FFFDF5" BorderBrush="#E8D9A8" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Current Device Save Paths" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                <ItemsControl ItemsSource="{Binding CurrentDevicePaths}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:CurrentSavePathEditorViewModel">
+                                            <StackPanel Spacing="4" Margin="0,0,0,8">
+                                                <TextBlock Text="{Binding SaveUnitId, StringFormat=Save unit {0}}" Foreground="#394B5A"/>
+                                                <TextBlock Text="{Binding UnitType}" Foreground="#394B5A"/>
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <TextBox Text="{Binding Path}" Watermark="Enter current device save path"/>
+                                                    <Button Grid.Column="1"
+                                                            Content="Open Folder"
+                                                            Command="{Binding OpenPathCommand}" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+
+</Window>

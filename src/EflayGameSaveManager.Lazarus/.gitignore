@@ -1,0 +1,13 @@
+bin/
+obj/
+lib/
+*.bak
+*.compiled
+*.dbg
+*.exe
+*.lps
+*.o
+*.obj
+*.or
+*.ppu
+*.res
