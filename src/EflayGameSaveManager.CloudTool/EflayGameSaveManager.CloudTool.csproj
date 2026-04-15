@@ -12,6 +12,11 @@
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishTrimmed>true</PublishTrimmed>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\EflayGameSaveManager.Core\EflayGameSaveManager.Core.csproj" />
   </ItemGroup>
