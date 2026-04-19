@@ -55,6 +55,7 @@ type
     procedure OpenConfigClicked(Sender: TObject);
     function FindConfigPath: string;
     function ReadRuntimeForcedDeviceName(const ConfigPath: string): string;
+    function ReadLiteConfigForcedDeviceName: string;
     function EnsureCurrentDevice(const ForcedDeviceName: string): string;
     function ResolvePathTokens(const Value: string): string;
     function GetCurrentDevicePath(Paths: TJSONObject): string;
@@ -344,7 +345,9 @@ begin
     JsonText.Free;
   end;
 
-  ForcedDeviceName := ReadRuntimeForcedDeviceName(FConfigPath);
+  ForcedDeviceName := ReadLiteConfigForcedDeviceName;
+  if ForcedDeviceName = '' then
+    ForcedDeviceName := ReadRuntimeForcedDeviceName(FConfigPath);
   FCurrentDeviceId := EnsureCurrentDevice(ForcedDeviceName);
   LoadGames;
   SetStatus('Loaded ' + IntToStr(FGameList.Items.Count) + ' games for ' + FCurrentDeviceName);
@@ -644,6 +647,40 @@ begin
         Result := Trim(RuntimeJson.Get('forced_device_name', ''));
       finally
         RuntimeJson.Free;
+      end;
+    finally
+      Parser.Free;
+    end;
+  finally
+    JsonText.Free;
+  end;
+end;
+
+function TMainForm.ReadLiteConfigForcedDeviceName: string;
+var
+  LiteConfigPath: string;
+  JsonText: TStringList;
+  Parser: TJSONParser;
+  Root: TJSONObject;
+  Settings: TJSONObject;
+begin
+  Result := '';
+  LiteConfigPath := IncludeTrailingPathDelimiter(ExtractFileDir(FConfigPath)) + LiteConfigFileName;
+  if not FileExists(LiteConfigPath) then
+    Exit;
+
+  JsonText := TStringList.Create;
+  try
+    JsonText.LoadFromFile(LiteConfigPath);
+    Parser := TJSONParser.Create(JsonText.Text);
+    try
+      Root := Parser.Parse as TJSONObject;
+      try
+        Settings := Root.Objects['settings'];
+        if Settings <> nil then
+          Result := Trim(Settings.Get('forced_device_name', ''));
+      finally
+        Root.Free;
       end;
     finally
       Parser.Free;

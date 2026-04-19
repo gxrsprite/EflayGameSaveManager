@@ -1,8 +1,8 @@
-# Eflay Game Save Manager
+﻿# Eflay Game Save Manager
 
 Game save manager for keeping local game save paths and cloud backups in one shared configuration.
 
-The repository currently contains multiple front ends and helper projects. The active direction is the lightweight Lazarus UI for Winlator, with cloud work delegated to the existing .NET Core implementation.
+The repository currently contains multiple front ends and helper projects. The active direction is the lightweight Lazarus UI for Winlator.
 
 ## Projects
 
@@ -50,7 +50,15 @@ Lightweight Lazarus/FreePascal UI intended for Winlator.
 - Edits current-device save path and game executable path.
 - Provides local backup, run game, and open folder actions.
 - Prioritizes cloud operations with visible buttons for status, upload, and restore.
-- Delegates cloud work to `GameSaveManager.CloudTool.exe`.
+- Implements cloud status/upload/restore directly in Lazarus (S3-compatible requests and signing).
+- Uses external 7-Zip for cloud restore extraction:
+  - `7zz.exe` (recommended), or
+  - `7za.exe`, or
+  - `7z.exe` + `7z.dll`.
+- Supports Lite-only config file `GameSaveManagerLite.config.json`:
+  - `settings.forced_device_name` for Lite current-device override (higher priority than runtime file).
+  - `settings.seven_zip_dir` to override the 7-Zip directory.
+  - If omitted, 7-Zip is resolved from the same directory as `GameSaveManagerLite.exe`.
 
 The deployable files are expected to sit together in:
 
@@ -66,7 +74,7 @@ Build:
 
 ### `EflayGameSaveManager.CloudTool`
 
-Small command-line helper used by the Lazarus UI for cloud operations.
+Small command-line helper for scripting and diagnostics.
 
 - Reuses `EflayGameSaveManager.Core`.
 - Keeps S3 signing, archive creation, and restore behavior in one .NET implementation.
@@ -86,8 +94,6 @@ Native AOT publish script:
 ```powershell
 src\EflayGameSaveManager.CloudTool\publishaot.bat
 ```
-
-The script publishes into the Lazarus `bin` directory so the Lite UI can find it.
 
 ### `EflayGameSaveManager.Lvgl`
 
@@ -117,6 +123,7 @@ The app expects these files near the working directory or a parent directory:
 
 - `GameSaveManager.config.json`: game definitions, save paths, cloud backend, devices.
 - `GameSaveManager.runtime.json`: local runtime settings, currently used for `forced_device_name`.
+- `GameSaveManagerLite.config.json` (Lazarus optional): Lite-only overrides such as `settings.forced_device_name` and `settings.seven_zip_dir`.
 
 The cloud backend is configured under `settings.cloud_settings` in `GameSaveManager.config.json`.
 
@@ -126,11 +133,10 @@ The configuration file format is based on the upstream [`mcthesw/game-save-manag
 
 For normal desktop Windows usage, use the Avalonia project.
 
-For Winlator usage, use the Lazarus Lite UI and publish the CloudTool into the same `bin` directory:
+For Winlator usage, use the Lazarus Lite UI. Place a supported 7-Zip executable in `src\EflayGameSaveManager.Lazarus\bin` (or configure `settings.seven_zip_dir` in `GameSaveManagerLite.config.json`):
 
 ```powershell
 & 'F:\Program\lazarus\lazbuild.exe' --build-mode=Release src\EflayGameSaveManager.Lazarus\GameSaveManagerLite.lpi
-src\EflayGameSaveManager.CloudTool\publishaot.bat
 ```
 
 Then run:
@@ -144,140 +150,80 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 # Eflay Game Save Manager 中文说明
 
 这是一个游戏存档管理工具，用同一份配置维护本地游戏存档路径和云端备份。
-
-当前仓库里有多个前端和辅助项目。现阶段的主要方向是面向 Winlator 的轻量 Lazarus 界面，云端同步能力委托给已有的 .NET Core 实现。
+当前仓库包含多个前端与辅助项目，现阶段面向 Winlator 的主力是 Lazarus 轻量版。
 
 ## 项目说明
 
 ### `EflayGameSaveManager.Core`
 
-共享业务逻辑。
-
-- 读取和写入 `GameSaveManager.config.json`。
-- 根据 `GameSaveManager.runtime.json` 解析当前设备。
-- 解析 `<winDocuments>`、`<winLocalAppData>`、`<home>` 等路径 token。
-- 创建本地存档压缩包。
-- 通过 S3 兼容存储上传、列出、下载、恢复、删除云端备份。
-
-各个 UI 项目应尽量复用这个项目，不要重复实现存档、压缩包和云同步逻辑。
+共享业务逻辑：
+- 读写 `GameSaveManager.config.json`
+- 解析 `GameSaveManager.runtime.json`
+- 解析 `<winDocuments>`、`<winLocalAppData>`、`<home>` 等路径 token
+- 创建本地存档压缩包
+- 通过 S3 兼容存储进行上传、列表、下载、恢复、删除
 
 ### `EflayGameSaveManager.Avalonia`
 
-Avalonia 桌面主界面。
-
-- 功能较完整的 .NET 桌面前端。
-- 适合普通 Windows 桌面使用。
-- 在普通 Windows 桌面下启动很快。
-- 可以运行在 Winlator 和盖世游戏环境中，但启动会稍慢一些。
-- 使用 Core 项目处理配置、存档路径和云同步。
+主力 .NET 桌面版（Windows 常规桌面优先使用）。
 
 构建：
-
 ```powershell
 dotnet build src\EflayGameSaveManager.Avalonia\EflayGameSaveManager.Avalonia.csproj -c Release
-```
-
-Native AOT 发布脚本：
-
-```powershell
-src\EflayGameSaveManager.Avalonia\publishaot.bat
 ```
 
 ### `EflayGameSaveManager.Lazarus`
 
 面向 Winlator 的轻量 Lazarus/FreePascal 界面。
 
-- 比 Avalonia 界面启动更轻。
-- 读取现有 `GameSaveManager.config.json`。
-- 显示游戏列表和当前设备的存档路径。
-- 编辑当前设备的存档路径和游戏可执行文件路径。
-- 提供本地备份、运行游戏、打开目录等操作。
-- 云端操作按钮更显眼，包含状态、上传、恢复。
-- 云同步委托给 `GameSaveManager.CloudTool.exe`。
+当前状态：
+- 支持本地路径编辑、备份、运行游戏、打开目录
+- 云状态/上传/恢复已在 Lazarus 内置实现（不再依赖 CloudTool）
+- 云恢复解压依赖外部 7-Zip
 
-可部署文件应放在同一个目录：
+7-Zip 支持顺序：
+- `7zz.exe`（推荐）
+- `7za.exe`
+- `7z.exe` + `7z.dll`（同目录且位数匹配）
 
-```text
-src\EflayGameSaveManager.Lazarus\bin
+Lite 独立配置文件：
+- 文件名：`GameSaveManagerLite.config.json`
+- 配置项：
+  - `settings.forced_device_name`：Lazarus 当前设备名覆盖
+  - `settings.seven_zip_dir`：7-Zip 所在目录（可选）
+
+示例：
+```json
+{
+  "settings": {
+    "forced_device_name": "MyWinlatorDevice",
+    "seven_zip_dir": ".\\tools\\7zip"
+  }
+}
 ```
 
 构建：
-
 ```powershell
 & 'F:\Program\lazarus\lazbuild.exe' --build-mode=Release src\EflayGameSaveManager.Lazarus\GameSaveManagerLite.lpi
 ```
 
 ### `EflayGameSaveManager.CloudTool`
 
-供 Lazarus Lite 界面调用的云同步命令行工具。
-
-- 复用 `EflayGameSaveManager.Core`。
-- S3 签名、压缩包创建、恢复逻辑都保留在同一套 .NET 实现里。
-- 支持：
-  - `status`
-  - `upload-current`
-  - `restore-current`
-
-示例：
-
-```powershell
-src\EflayGameSaveManager.Lazarus\bin\GameSaveManager.CloudTool.exe --action status --config GameSaveManager.config.json --game WRCG
-```
-
-Native AOT 发布脚本：
-
-```powershell
-src\EflayGameSaveManager.CloudTool\publishaot.bat
-```
-
-该脚本会把 CloudTool 发布到 Lazarus 的 `bin` 目录，方便 Lite 界面直接找到它。
-
-### `EflayGameSaveManager.Lvgl`
-
-实验性的 LVGLSharp 前端。
-
-这个版本目前还没有形成可用成果，仍处于尝试阶段。它保留在解决方案中用于探索，但现在不应当视为稳定或推荐的 UI。
-
-当前情况：
-
-- 使用 `LVGLSharp.Forms` 和 `LVGLSharp.Runtime.Windows`。
-- 尝试了分页游戏列表和基础云同步/恢复动作。
-- 不是当前 Winlator 交付目标。
-
-### `EflayGameSaveManager.Core.Tests`
-
-Core 行为的单元测试项目。
-
-测试：
-
-```powershell
-dotnet test tests\EflayGameSaveManager.Core.Tests\EflayGameSaveManager.Core.Tests.csproj -c Release
-```
+命令行工具，主要用于脚本化操作和排障（Lazarus 日常云流程不再依赖它）。
 
 ## 配置文件
 
-程序会在当前工作目录或其父目录中查找：
+程序会在当前目录或父目录查找：
+- `GameSaveManager.config.json`：游戏定义、存档路径、云端后端、设备信息
+- `GameSaveManager.runtime.json`：运行时设置（如 `forced_device_name`）
+- `GameSaveManagerLite.config.json`（Lazarus 可选）：Lite 专用覆盖项（`forced_device_name`、`seven_zip_dir`）
 
-- `GameSaveManager.config.json`：游戏定义、存档路径、云端后端、设备信息。
-- `GameSaveManager.runtime.json`：本机运行时设置，目前用于 `forced_device_name`。
+## 推荐用法
 
-云端后端配置位于 `GameSaveManager.config.json` 的 `settings.cloud_settings` 下。
+- 常规 Windows 桌面：使用 Avalonia 版本
+- Winlator：使用 Lazarus 版本，并确保可用的 7-Zip 可执行文件在 `bin` 目录或 `settings.seven_zip_dir` 指定目录
 
-配置文件格式来源于上游项目 [`mcthesw/game-save-manager`](https://github.com/mcthesw/game-save-manager)。
-
-## 当前推荐用法
-
-普通 Windows 桌面使用 Avalonia 项目。
-
-Winlator 使用 Lazarus Lite 界面，并把 CloudTool AOT 发布到同一个 `bin` 目录：
-
-```powershell
-& 'F:\Program\lazarus\lazbuild.exe' --build-mode=Release src\EflayGameSaveManager.Lazarus\GameSaveManagerLite.lpi
-src\EflayGameSaveManager.CloudTool\publishaot.bat
-```
-
-然后运行：
-
+运行：
 ```text
 src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 ```
