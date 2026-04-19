@@ -1119,11 +1119,9 @@ begin
       BackupsJson := Parser.Parse as TJSONObject;
       try
         Backups := nil;
-        if not BackupsJson.Find('Backups', Backups) then
-          BackupsJson.Find('backups', Backups);
+        BackupsJson.Find('backups', Backups);
         DeviceHeads := nil;
-        if not BackupsJson.Find('DeviceHeads', DeviceHeads) then
-          BackupsJson.Find('device_heads', DeviceHeads);
+        BackupsJson.Find('device_heads', DeviceHeads);
         CurrentHead := '';
         if DeviceHeads <> nil then
           CurrentHead := DeviceHeads.Get(FCurrentDeviceId, '');
@@ -1147,10 +1145,10 @@ begin
             for I := 0 to Backups.Count - 1 do
             begin
               Backup := Backups.Objects[I];
-              Line := Backup.Get('Date', Backup.Get('date', '-')) + ' | ' +
-                IntToStr(Backup.Get('Size', Backup.Get('size', 0))) + ' B | device: ' +
-                Backup.Get('DeviceId', Backup.Get('device_id', '-'));
-              if (CurrentHead <> '') and SameText(Backup.Get('Date', Backup.Get('date', '')), CurrentHead) then
+              Line := Backup.Get('date', '-') + ' | ' +
+                IntToStr(Backup.Get('size', 0)) + ' B | device: ' +
+                Backup.Get('device_id', '-');
+              if (CurrentHead <> '') and SameText(Backup.Get('date', ''), CurrentHead) then
                 Line += ' | current';
               FInfo.Lines.Add(Line);
             end;
@@ -1176,9 +1174,9 @@ begin
   end;
 end;
 
-function BackupString(const Backup: TJSONObject; const PascalName, JsonName, DefaultValue: string): string;
+function BackupString(const Backup: TJSONObject; const JsonName, DefaultValue: string): string;
 begin
-  Result := Backup.Get(PascalName, Backup.Get(JsonName, DefaultValue));
+  Result := Backup.Get(JsonName, DefaultValue);
 end;
 
 function NormalizeCloudPath(const Value: string): string;
@@ -1279,27 +1277,25 @@ begin
   Result := StringReplace(Result, '\', '/', [rfReplaceAll]);
 end;
 
-procedure EnsureJsonArray(const Obj: TJSONObject; const PrimaryName, SecondaryName: string; out Value: TJSONArray);
+procedure EnsureJsonArray(const Obj: TJSONObject; const AName: string; out Value: TJSONArray);
 begin
   Value := nil;
-  if not Obj.Find(PrimaryName, Value) then
-    Obj.Find(SecondaryName, Value);
+  Obj.Find(AName, Value);
   if Value = nil then
   begin
     Value := TJSONArray.Create;
-    Obj.Add(SecondaryName, Value);
+    Obj.Add(AName, Value);
   end;
 end;
 
-procedure EnsureJsonObject(const Obj: TJSONObject; const PrimaryName, SecondaryName: string; out Value: TJSONObject);
+procedure EnsureJsonObject(const Obj: TJSONObject; const AName: string; out Value: TJSONObject);
 begin
   Value := nil;
-  if not Obj.Find(PrimaryName, Value) then
-    Obj.Find(SecondaryName, Value);
+  Obj.Find(AName, Value);
   if Value = nil then
   begin
     Value := TJSONObject.Create;
-    Obj.Add(SecondaryName, Value);
+    Obj.Add(AName, Value);
   end;
 end;
 
@@ -1377,8 +1373,8 @@ begin
       end;
 
       try
-        EnsureJsonArray(Manifest, 'Backups', 'backups', Backups);
-        EnsureJsonObject(Manifest, 'DeviceHeads', 'device_heads', DeviceHeads);
+        EnsureJsonArray(Manifest, 'backups', Backups);
+        EnsureJsonObject(Manifest, 'device_heads', DeviceHeads);
         with TFileStream.Create(ArchivePath, fmOpenRead) do
         try
           ArchiveSize := Size;
@@ -1561,11 +1557,9 @@ begin
       Manifest := Parser.Parse as TJSONObject;
       try
         Backups := nil;
-        if not Manifest.Find('Backups', Backups) then
-          Manifest.Find('backups', Backups);
+        Manifest.Find('backups', Backups);
         DeviceHeads := nil;
-        if not Manifest.Find('DeviceHeads', DeviceHeads) then
-          Manifest.Find('device_heads', DeviceHeads);
+        Manifest.Find('device_heads', DeviceHeads);
 
         Backup := ResolveCurrentCloudBackup(Backups, DeviceHeads);
         if Backup = nil then
@@ -1656,8 +1650,8 @@ begin
     for I := 0 to Backups.Count - 1 do
     begin
       Backup := Backups.Objects[I];
-      BackupDate := BackupString(Backup, 'Date', 'date', '');
-      DeviceId := BackupString(Backup, 'DeviceId', 'device_id', '');
+      BackupDate := BackupString(Backup, 'date', '');
+      DeviceId := BackupString(Backup, 'device_id', '');
       if SameText(DeviceId, FCurrentDeviceId) and (BackupDate = CurrentHead) then
         Exit(Backup);
     end;
@@ -1665,7 +1659,7 @@ begin
     for I := 0 to Backups.Count - 1 do
     begin
       Backup := Backups.Objects[I];
-      if BackupString(Backup, 'Date', 'date', '') = CurrentHead then
+      if BackupString(Backup, 'date', '') = CurrentHead then
         Exit(Backup);
     end;
   end;
@@ -1674,8 +1668,8 @@ begin
   for I := 0 to Backups.Count - 1 do
   begin
     Backup := Backups.Objects[I];
-    DeviceId := BackupString(Backup, 'DeviceId', 'device_id', '');
-    BackupDate := BackupString(Backup, 'Date', 'date', '');
+    DeviceId := BackupString(Backup, 'device_id', '');
+    BackupDate := BackupString(Backup, 'date', '');
     if SameText(DeviceId, FCurrentDeviceId) and ((Result = nil) or (CompareText(BackupDate, BestDate) > 0)) then
     begin
       Result := Backup;
@@ -1689,7 +1683,7 @@ begin
   for I := 0 to Backups.Count - 1 do
   begin
     Backup := Backups.Objects[I];
-    BackupDate := BackupString(Backup, 'Date', 'date', '');
+    BackupDate := BackupString(Backup, 'date', '');
     if (Result = nil) or (CompareText(BackupDate, BestDate) > 0) then
     begin
       Result := Backup;
@@ -1707,7 +1701,7 @@ var
 const
   LegacyPrefix = 'save_data\';
 begin
-  RelativePath := Trim(BackupString(Backup, 'Path', 'path', ''));
+  RelativePath := Trim(BackupString(Backup, 'path', ''));
   if RelativePath <> '' then
   begin
     RelativePath := NormalizeLegacyArchivePath(RelativePath, CloudSettings);
@@ -1727,7 +1721,7 @@ begin
     Exit(NormalizeCloudPath(RelativePath));
   end;
 
-  DateValue := BackupString(Backup, 'Date', 'date', '');
+  DateValue := BackupString(Backup, 'date', '');
   Result := BuildGameBackupsKey(CloudSettings, GetGameName(FSelectedGame));
   if Copy(Result, Length(Result) - Length('/Backups.json') + 1, Length('/Backups.json')) = '/Backups.json' then
     Delete(Result, Length(Result) - Length('/Backups.json') + 1, Length('/Backups.json'));

@@ -11,3 +11,4 @@ lib/
 *.or
 *.ppu
 *.res
+!GameSaveManagerLite.res

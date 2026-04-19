@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace EflayGameSaveManager.Core.Models;
@@ -128,7 +129,7 @@ public sealed class FavoriteNode
 public sealed class QuickActionSettings
 {
     [JsonPropertyName("quick_action_game")]
-    public string? QuickActionGame { get; set; }
+    public JsonElement QuickActionGame { get; set; }
 
     [JsonPropertyName("hotkeys")]
     public HotkeySettings Hotkeys { get; set; } = new();
