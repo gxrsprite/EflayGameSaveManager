@@ -1,11 +1,19 @@
 using EflayGameSaveManager.Core.Models;
 using EflayGameSaveManager.Core.Services;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 
 var exitCode = await CloudTool.RunAsync(args);
 return exitCode;
 
 internal static class CloudTool
 {
+    private static readonly JsonSerializerOptions BackupsJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     public static async Task<int> RunAsync(string[] args)
     {
         try
@@ -24,11 +32,25 @@ internal static class CloudTool
 
             var configurationService = new GameSaveManagerConfigurationService();
             var config = await configurationService.LoadAsync(configPath);
+            var configDirectory = Path.GetDirectoryName(configPath) ?? AppContext.BaseDirectory;
             var currentDeviceService = new CurrentDeviceService();
             var gameLibraryService = new GameLibraryService(
                 new EnvironmentTokenResolver(),
                 currentDeviceService,
                 new AppRuntimeSettingsService());
+
+            if (string.Equals(action, "init-backup-dirs", StringComparison.OrdinalIgnoreCase))
+            {
+                var backupRoot = gameLibraryService.ResolveBackupRoot(configDirectory, config.BackupPath);
+                var result = InitializeBackupFolders(config.Games, backupRoot);
+                Console.WriteLine($"Backup root: {backupRoot}");
+                Console.WriteLine($"Game folders created: {result.CreatedFolders}");
+                Console.WriteLine($"Game folders skipped: {result.SkippedFolders}");
+                Console.WriteLine($"Backups.json created: {result.CreatedBackupsJson}");
+                Console.WriteLine($"Backups.json skipped: {result.SkippedBackupsJson}");
+                return 0;
+            }
+
             var snapshot = gameLibraryService.CreateSnapshot(config, configPath);
             var cloudSettings = config.Settings.CloudSettings;
             EnsureCloudConfigured(cloudSettings);
@@ -149,8 +171,60 @@ internal static class CloudTool
     private static void PrintUsage()
     {
         Console.Error.WriteLine("Usage:");
+        Console.Error.WriteLine("  GameSaveManager.CloudTool.exe --action init-backup-dirs --config GameSaveManager.config.json");
         Console.Error.WriteLine("  GameSaveManager.CloudTool.exe --action status --config GameSaveManager.config.json --game \"Game Name\"");
         Console.Error.WriteLine("  GameSaveManager.CloudTool.exe --action upload-current --config GameSaveManager.config.json --game \"Game Name\"");
         Console.Error.WriteLine("  GameSaveManager.CloudTool.exe --action restore-current --config GameSaveManager.config.json --game \"Game Name\"");
+    }
+
+    private static (int CreatedFolders, int SkippedFolders, int CreatedBackupsJson, int SkippedBackupsJson) InitializeBackupFolders(
+        IEnumerable<GameDefinition> games,
+        string backupRoot)
+    {
+        Directory.CreateDirectory(backupRoot);
+
+        var createdFolders = 0;
+        var skippedFolders = 0;
+        var createdBackupsJson = 0;
+        var skippedBackupsJson = 0;
+
+        foreach (var game in games)
+        {
+            if (string.IsNullOrWhiteSpace(game.Name))
+            {
+                continue;
+            }
+
+            var gameDirectory = Path.Combine(backupRoot, game.Name);
+            if (Directory.Exists(gameDirectory))
+            {
+                skippedFolders++;
+            }
+            else
+            {
+                Directory.CreateDirectory(gameDirectory);
+                createdFolders++;
+            }
+
+            var backupsJsonPath = Path.Combine(gameDirectory, "Backups.json");
+            if (File.Exists(backupsJsonPath))
+            {
+                skippedBackupsJson++;
+                continue;
+            }
+
+            var backupManifest = new Dictionary<string, object?>
+            {
+                ["name"] = game.Name,
+                ["backups"] = Array.Empty<object>(),
+                ["device_heads"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                ["sync_version"] = 0
+            };
+
+            File.WriteAllText(backupsJsonPath, JsonSerializer.Serialize(backupManifest, BackupsJsonOptions));
+            createdBackupsJson++;
+        }
+
+        return (createdFolders, skippedFolders, createdBackupsJson, skippedBackupsJson);
     }
 }

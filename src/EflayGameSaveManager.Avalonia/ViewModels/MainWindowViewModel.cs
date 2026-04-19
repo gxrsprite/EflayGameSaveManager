@@ -267,6 +267,8 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             return;
         }
+        AppLogger.Info(
+            $"UI restore-current requested: game={game.Name}, device={snapshot.CurrentDevice.DeviceName}[{snapshot.CurrentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
 
         await RunBusyAsync(
             $"Restoring cloud save for {game.Name}...",
@@ -336,6 +338,8 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         var backupDate = SelectedCloudBackup.Date;
+        AppLogger.Info(
+            $"UI restore-selected-backup requested: game={game.Name}, backupDate={backupDate}, device={snapshot.CurrentDevice.DeviceName}[{snapshot.CurrentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
         await RunBusyAsync(
             $"Restoring cloud backup {backupDate} for {game.Name}...",
             async () =>
@@ -501,6 +505,8 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             return;
         }
+        AppLogger.Info(
+            $"UI refresh-cloud-status: game={game.Name}, forceReload={forceReload}, device={snapshot.CurrentDevice.DeviceName}[{snapshot.CurrentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
 
         if (!forceReload && !string.Equals(SelectedGameCloudState, "Checking cloud status...", StringComparison.Ordinal))
         {

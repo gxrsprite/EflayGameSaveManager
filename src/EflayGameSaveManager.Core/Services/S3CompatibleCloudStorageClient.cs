@@ -200,6 +200,8 @@ public sealed class S3CompatibleCloudStorageClient
                 var stringToSign =
                     $"AWS4-HMAC-SHA256\n{amzDate}\n{credentialScope}\n{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalRequest)))}";
                 var signature = CreateSignature(backend.SecretAccessKey, shortDate, region, stringToSign);
+                AppLogger.Info(
+                    $"Cloud signing: method={method.Method}, endpoint={backend.Endpoint}, bucket={backend.Bucket}, objectKey={objectKey}, canonicalUri={canonicalUri}, canonicalQuery={canonicalQueryString}, host={hostHeader}, scope={credentialScope}, amzDate={amzDate}, payloadHash={payloadHash}");
 
                 var request = new HttpRequestMessage(method, requestUri);
                 if (content is not null)
@@ -228,7 +230,22 @@ public sealed class S3CompatibleCloudStorageClient
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                    AppLogger.Error($"Cloud request failed: {method.Method} {requestUri} -> {(int)response.StatusCode} {response.StatusCode}. Body: {body}");
+                    var requestId = response.Headers.TryGetValues("x-amz-request-id", out var requestIds)
+                        ? requestIds.FirstOrDefault()
+                        : string.Empty;
+                    var extendedRequestId = response.Headers.TryGetValues("x-amz-id-2", out var extendedIds)
+                        ? extendedIds.FirstOrDefault()
+                        : string.Empty;
+                    AppLogger.Error(
+                        $"Cloud request failed: {method.Method} {requestUri} -> {(int)response.StatusCode} {response.StatusCode}. request-id={requestId}, id-2={extendedRequestId}. Body: {body}");
+                    if (ContainsSignatureDoesNotMatch(body))
+                    {
+                        AppLogger.Error(
+                            "Cloud signature mismatch diagnostics: " +
+                            $"method={method.Method}, requestUri={requestUri}, canonicalUri={canonicalUri}, canonicalQuery={canonicalQueryString}, " +
+                            $"host={hostHeader}, signedHeaders={signedHeaders}, credentialScope={credentialScope}, amzDate={amzDate}, payloadHash={payloadHash}, " +
+                            $"canonicalRequest={canonicalRequest}, stringToSign={stringToSign}");
+                    }
                     response.Dispose();
                     throw new InvalidOperationException(
                         $"Cloud request failed for '{objectKey}'. Status {(int)response.StatusCode}: {body}");
@@ -348,6 +365,11 @@ public sealed class S3CompatibleCloudStorageClient
         {
             throw new InvalidOperationException("Cloud backend configuration is incomplete.");
         }
+    }
+
+    private static bool ContainsSignatureDoesNotMatch(string body)
+    {
+        return body.Contains("SignatureDoesNotMatch", StringComparison.OrdinalIgnoreCase);
     }
 
     private const string EmptyPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";

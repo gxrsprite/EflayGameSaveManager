@@ -90,12 +90,20 @@
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Content="Sync Current Save To Cloud"
-                                    Command="{Binding UploadSelectedGameCurrentSaveCommand}"
-                                    IsEnabled="{Binding SelectedGameCanSync}" />
-                            <Button Content="Restore From Cloud"
-                                    Command="{Binding RestoreSelectedGameCurrentSaveCommand}"
-                                    IsEnabled="{Binding SelectedGameCanSync}" />
+                            <Button Command="{Binding UploadSelectedGameCurrentSaveCommand}"
+                                    IsEnabled="{Binding SelectedGameCanSync}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="☁↑" FontSize="14" FontWeight="Bold"/>
+                                    <TextBlock Text="Sync Current Save To Cloud"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding RestoreSelectedGameCurrentSaveCommand}"
+                                    IsEnabled="{Binding SelectedGameCanSync}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="☁↓" FontSize="14" FontWeight="Bold"/>
+                                    <TextBlock Text="Restore From Cloud"/>
+                                </StackPanel>
+                            </Button>
                             <Button Content="Run Game"
                                     Command="{Binding RunCurrentGameCommand}"
                                     IsEnabled="{Binding HasSelectedGame}" />

@@ -75,9 +75,6 @@ type
     procedure RunPascalCloudUpload;
     procedure RunPascalCloudRestore;
     procedure RunCloudTool(const CloudAction: string);
-    function Resolve7ZipExecutablePath: string;
-    function ReadLiteConfigSevenZipDir: string;
-    procedure ExtractArchiveWith7Zip(const ArchivePath, ExtractRoot: string);
     function CreateCurrentDeviceArchive(const WorkRoot: string): string;
     procedure StageSaveUnit(const SourcePath, StagedPath, UnitType: string);
     procedure AddDirectoryToZip(Zipper: TZipper; const RootDir, SourceDir: string);
@@ -99,7 +96,6 @@ implementation
 
 const
   ConfigFileName = 'GameSaveManager.config.json';
-  LiteConfigFileName = 'GameSaveManagerLite.config.json';
   RuntimeFileName = 'GameSaveManager.runtime.json';
 
 constructor TMainForm.Create(TheOwner: TComponent);
@@ -205,7 +201,7 @@ begin
 
   FCloudUploadButton := TButton.Create(Self);
   FCloudUploadButton.Parent := CloudButtons;
-  FCloudUploadButton.Caption := '↑ Upload Current Save To Cloud';
+  FCloudUploadButton.Caption := 'Upload Current Save To Cloud';
   FCloudUploadButton.Left := 130;
   FCloudUploadButton.Top := 4;
   FCloudUploadButton.Width := 230;
@@ -214,7 +210,7 @@ begin
 
   FCloudRestoreButton := TButton.Create(Self);
   FCloudRestoreButton.Parent := CloudButtons;
-  FCloudRestoreButton.Caption := '↓ Restore Current Cloud Save';
+  FCloudRestoreButton.Caption := 'Restore Current Cloud Save';
   FCloudRestoreButton.Left := 370;
   FCloudRestoreButton.Top := 4;
   FCloudRestoreButton.Width := 230;
@@ -762,136 +758,6 @@ begin
   raise Exception.Create('GameSaveManager.CloudTool.exe not found. Publish or copy it next to GameSaveManagerLite.exe.');
 end;
 
-function TMainForm.ReadLiteConfigSevenZipDir: string;
-var
-  LiteConfigPath: string;
-  JsonText: TStringList;
-  Parser: TJSONParser;
-  Root: TJSONObject;
-  Settings: TJSONObject;
-begin
-  Result := '';
-  LiteConfigPath := IncludeTrailingPathDelimiter(ExtractFileDir(FConfigPath)) + LiteConfigFileName;
-  if not FileExists(LiteConfigPath) then
-    Exit;
-
-  JsonText := TStringList.Create;
-  try
-    JsonText.LoadFromFile(LiteConfigPath);
-    Parser := TJSONParser.Create(JsonText.Text);
-    try
-      Root := Parser.Parse as TJSONObject;
-      try
-        Settings := Root.Objects['settings'];
-        if Settings <> nil then
-          Result := Trim(Settings.Get('seven_zip_dir', ''));
-      finally
-        Root.Free;
-      end;
-    finally
-      Parser.Free;
-    end;
-  finally
-    JsonText.Free;
-  end;
-end;
-
-function TMainForm.Resolve7ZipExecutablePath: string;
-var
-  SevenZipDir: string;
-  Candidate: string;
-  DllPath: string;
-begin
-  SevenZipDir := ReadLiteConfigSevenZipDir;
-  if SevenZipDir <> '' then
-  begin
-    SevenZipDir := ResolvePathTokens(SevenZipDir);
-    if not IsAbsolutePath(SevenZipDir) then
-      SevenZipDir := ExpandFileName(IncludeTrailingPathDelimiter(ExtractFileDir(FConfigPath)) + SevenZipDir);
-    Candidate := IncludeTrailingPathDelimiter(SevenZipDir) + '7zz.exe';
-    if FileExists(Candidate) then
-      Exit(Candidate);
-    Candidate := IncludeTrailingPathDelimiter(SevenZipDir) + '7za.exe';
-    if FileExists(Candidate) then
-      Exit(Candidate);
-    Candidate := IncludeTrailingPathDelimiter(SevenZipDir) + '7z.exe';
-    if FileExists(Candidate) then
-    begin
-      DllPath := IncludeTrailingPathDelimiter(SevenZipDir) + '7z.dll';
-      if not FileExists(DllPath) then
-        raise Exception.Create('7z.exe found but 7z.dll is missing in: ' + SevenZipDir + '. Use 7zz.exe or copy matching 7z.dll.');
-      Exit(Candidate);
-    end;
-    raise Exception.Create('7z executable not found in configured seven_zip_dir: ' + SevenZipDir + '. Expected 7zz.exe, 7za.exe or 7z.exe.');
-  end;
-
-  Candidate := IncludeTrailingPathDelimiter(ExtractFileDir(ParamStr(0))) + '7zz.exe';
-  if FileExists(Candidate) then
-    Exit(Candidate);
-  Candidate := IncludeTrailingPathDelimiter(ExtractFileDir(ParamStr(0))) + '7za.exe';
-  if FileExists(Candidate) then
-    Exit(Candidate);
-
-  Candidate := IncludeTrailingPathDelimiter(ExtractFileDir(ParamStr(0))) + '7z.exe';
-  if FileExists(Candidate) then
-  begin
-    DllPath := IncludeTrailingPathDelimiter(ExtractFileDir(ParamStr(0))) + '7z.dll';
-    if not FileExists(DllPath) then
-      raise Exception.Create('7z.exe found but 7z.dll is missing next to GameSaveManagerLite.exe. Use 7zz.exe or copy matching 7z.dll.');
-    Exit(Candidate);
-  end;
-
-  raise Exception.Create('7z executable not found. Put 7zz.exe or 7za.exe (recommended), or 7z.exe+7z.dll next to GameSaveManagerLite.exe, or set settings.seven_zip_dir in ' + LiteConfigFileName + '.');
-end;
-
-procedure TMainForm.ExtractArchiveWith7Zip(const ArchivePath, ExtractRoot: string);
-var
-  Proc: TProcess;
-  Output: TStringList;
-  SevenZipPath: string;
-  OutputText: string;
-  ArchiveSize: Int64;
-begin
-  if not FileExists(ArchivePath) then
-    raise Exception.Create('Downloaded archive file not found: ' + ArchivePath);
-
-  with TFileStream.Create(ArchivePath, fmOpenRead or fmShareDenyNone) do
-  try
-    ArchiveSize := Size;
-  finally
-    Free;
-  end;
-
-  if ArchiveSize <= 0 then
-    raise Exception.Create('Downloaded archive file is empty: ' + ArchivePath);
-
-  SevenZipPath := Resolve7ZipExecutablePath;
-
-  Proc := TProcess.Create(nil);
-  Output := TStringList.Create;
-  try
-    Proc.Executable := SevenZipPath;
-    Proc.Parameters.Add('x');
-    Proc.Parameters.Add('-y');
-    Proc.Parameters.Add('-aoa');
-    Proc.Parameters.Add('-bb1');
-    Proc.Parameters.Add('-o' + ExtractRoot);
-    Proc.Parameters.Add(ArchivePath);
-    Proc.CurrentDirectory := ExtractFileDir(ArchivePath);
-    Proc.Options := [poUsePipes, poStderrToOutPut, poWaitOnExit];
-    Proc.Execute;
-    Output.LoadFromStream(Proc.Output);
-    OutputText := Trim(Output.Text);
-
-    if Proc.ExitStatus <> 0 then
-      raise Exception.Create('7z extract failed. exit=' + IntToStr(Proc.ExitStatus) +
-        ', archive=' + ArchivePath + ', size=' + IntToStr(ArchiveSize) + '. ' + OutputText);
-  finally
-    Output.Free;
-    Proc.Free;
-  end;
-end;
-
 function TMainForm.SanitizeSegment(const Value: string): string;
 var
   I: Integer;
@@ -1202,10 +1068,7 @@ begin
     Delete(RootPath, Length(RootPath), 1);
 
   if SameText(Copy(Normalized, 1, Length(SaveDataPrefix)), SaveDataPrefix) then
-  begin
-    if RootPath <> '' then
-      Normalized := RootPath + '\' + Normalized;
-  end;
+    Normalized := RootPath + '\' + Copy(Normalized, Length(SaveDataPrefix) + 1, MaxInt);
 
   Result := Normalized;
 end;
@@ -1493,6 +1356,7 @@ var
   ArchivePath: string;
   Guid: TGUID;
   ErrorContent: string;
+  UnZipper: TUnZipper;
   SavePaths: TJSONArray;
   SaveUnit: TJSONObject;
   Paths: TJSONObject;
@@ -1554,8 +1418,17 @@ begin
       if not TPascalS3Client.TryDownloadFile(Backend, ArchiveKey, ArchivePath, ErrorContent, StatusCode) then
         raise Exception.Create('Cloud archive request failed: HTTP ' + IntToStr(StatusCode) + ' ' + ErrorContent);
 
-      SetStatus('Extracting cloud archive with 7z...');
-      ExtractArchiveWith7Zip(ArchivePath, ExtractRoot);
+      SetStatus('Extracting cloud archive...');
+      UnZipper := TUnZipper.Create;
+      try
+        UnZipper.FileName := ArchivePath;
+        UnZipper.OutputPath := ExtractRoot;
+        UnZipper.UseUTF8 := True;
+        UnZipper.Examine;
+        UnZipper.UnZipAllFiles;
+      finally
+        UnZipper.Free;
+      end;
 
       RestoredCount := 0;
       SavePaths := JsonArray(FSelectedGame, 'save_paths');

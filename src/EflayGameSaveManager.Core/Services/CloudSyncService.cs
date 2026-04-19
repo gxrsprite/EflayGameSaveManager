@@ -32,6 +32,8 @@ public sealed class CloudSyncService
         CloudSettings cloudSettings,
         CancellationToken cancellationToken = default)
     {
+        AppLogger.Info(
+            $"Cloud upload-current start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
         var rootKey = GetGameRootKey(cloudSettings, game.Name);
         var workRoot = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager", "upload", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workRoot);
@@ -70,6 +72,8 @@ public sealed class CloudSyncService
                 cancellationToken);
 
             await UpdateSyncStateAsync(cloudSettings, currentDevice, game.Name, timestamp, cancellationToken);
+            AppLogger.Info(
+                $"Cloud upload-current completed: game={game.Name}, device={currentDevice.DeviceId}, archiveKey={archiveKey}, size={new FileInfo(archivePath).Length}, rootKey={rootKey}");
 
             return new CloudUploadResult(
                 rootKey,
@@ -137,10 +141,14 @@ public sealed class CloudSyncService
         CloudSettings cloudSettings,
         CancellationToken cancellationToken = default)
     {
+        AppLogger.Info(
+            $"Cloud restore-current start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
         var backups = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken)
                       ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
         var currentBackup = ResolveCurrentBackup(backups, currentDevice.DeviceId)
                             ?? throw new InvalidOperationException($"No cloud backup head found for '{game.Name}' on device '{currentDevice.DeviceName}'.");
+        AppLogger.Info(
+            $"Cloud restore-current resolved head: game={game.Name}, device={currentDevice.DeviceId}, backupDate={currentBackup.Date}, backupPath={currentBackup.Path}");
 
         return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, currentBackup, cancellationToken);
     }
@@ -161,6 +169,8 @@ public sealed class CloudSyncService
                       ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
         var backup = backups.Backups.FirstOrDefault(item => string.Equals(item.Date, backupDate, StringComparison.Ordinal))
                      ?? throw new InvalidOperationException($"Cloud backup not found: {backupDate}");
+        AppLogger.Info(
+            $"Cloud restore-backup resolved entry: game={game.Name}, backupDate={backupDate}, device={backup.DeviceId}, backupPath={backup.Path}, size={backup.Size}");
 
         return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, backup, cancellationToken);
     }
@@ -273,6 +283,8 @@ public sealed class CloudSyncService
         CancellationToken cancellationToken)
     {
         var archiveKey = ResolveArchiveKey(backup, cloudSettings, game.Name);
+        AppLogger.Info(
+            $"Cloud restore-backup start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], backupDate={backup.Date}, backupPath={backup.Path}, archiveKey={archiveKey}");
 
         var workRoot = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager", "download", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workRoot);
@@ -283,6 +295,8 @@ public sealed class CloudSyncService
             await _storageClient.DownloadFileAsync(cloudSettings.Backend, archiveKey, archivePath, cancellationToken);
             _archiveTransferService.RestoreCurrentDeviceArchive(archivePath, game, currentDevice);
             await UpdateSyncStateAsync(cloudSettings, currentDevice, game.Name, backup.Date, cancellationToken);
+            AppLogger.Info(
+                $"Cloud restore-backup completed: game={game.Name}, backupDate={backup.Date}, archiveKey={archiveKey}, downloadedBytes={new FileInfo(archivePath).Length}");
 
             return new CloudDownloadResult(
                 archiveKey,
@@ -533,9 +547,7 @@ public sealed class CloudSyncService
     {
         if (!string.IsNullOrWhiteSpace(backupEntry.Path))
         {
-            var relativePath = backupEntry.Path
-                .Replace('/', '\\')
-                .Trim();
+            var relativePath = NormalizeLegacyArchivePath(backupEntry.Path, cloudSettings);
 
             if (relativePath.StartsWith("./", StringComparison.Ordinal))
             {
@@ -563,5 +575,50 @@ public sealed class CloudSyncService
 
         var gameRootKey = GetGameRootKey(cloudSettings, gameName);
         return CloudStoragePathHelper.CombineKey(gameRootKey, $"{backupEntry.Date}.zip");
+    }
+
+    private static string NormalizeLegacyArchivePath(string originalPath, CloudSettings cloudSettings)
+    {
+        var configuredSaveDataRoot = GetSaveDataRootKey(cloudSettings).Replace('/', '\\');
+        var normalized = originalPath
+            .Replace('/', '\\')
+            .Trim();
+
+        if (normalized.StartsWith(".\\", StringComparison.Ordinal))
+        {
+            normalized = normalized[2..];
+        }
+        else if (normalized.StartsWith("./", StringComparison.Ordinal))
+        {
+            normalized = normalized[2..];
+        }
+
+        // Legacy records may store an absolute local path such as:
+        // E:\Program Files\RGSM\.\save_data\WRC4\yyyy-MM-dd_HH-mm-ss.zip
+        // Convert it back to cloud-root-relative form.
+        const string saveDataMarker = "\\save_data\\";
+        var markerIndex = normalized.IndexOf(saveDataMarker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex >= 0)
+        {
+            normalized = "save_data\\" + normalized[(markerIndex + saveDataMarker.Length)..];
+        }
+
+        var parts = normalized
+            .Split('\\', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(part => !string.Equals(part, ".", StringComparison.Ordinal))
+            .ToArray();
+        if (parts.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        normalized = string.Join("\\", parts);
+
+        if (normalized.StartsWith("save_data\\", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = configuredSaveDataRoot + "\\" + normalized["save_data\\".Length..];
+        }
+
+        return normalized;
     }
 }
