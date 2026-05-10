@@ -2,7 +2,7 @@
 
 Game save manager for keeping local game save paths and cloud backups in one shared configuration.
 
-The repository currently contains multiple front ends and helper projects. The active direction is the lightweight Lazarus UI for Winlator.
+The recommended app is now the Avalonia desktop version. It can be used independently for normal Windows usage, including creating a new configuration from scratch, adding games, editing save paths, and syncing cloud backups. The Lazarus version is kept as a lightweight fallback to try when Avalonia cannot run in a constrained environment such as some Winlator setups.
 
 ## Projects
 
@@ -20,11 +20,18 @@ Most UI projects should reuse this project instead of duplicating save/archive/c
 
 ### `EflayGameSaveManager.Avalonia`
 
-Main desktop UI built with Avalonia.
+Main and recommended desktop UI built with Avalonia.
 
-- Full-featured .NET desktop front end.
-- Good for normal Windows desktop use.
-- Starts quickly on normal Windows desktop.
+- Standalone .NET desktop front end for normal Windows use.
+- Can start without an existing `GameSaveManager.config.json`; adding a game writes a new config file.
+- Lists games, save units, current-device paths, executable paths, cloud status, and cloud backup history.
+- Adds new games from the UI.
+- Supports folder saves, file saves, and Windows registry saves (`WinRegistry`).
+- Lets users select file/folder paths or edit paths manually, including token paths such as `<home>` and `<winLocalAppData>`.
+- Uploads current saves to S3-compatible cloud storage.
+- Restores current cloud saves and selected cloud backup zip entries.
+- Downloads, deletes, and rebuilds cloud backup indexes.
+- Can run the configured game executable and open related folders.
 - Can run in Winlator and GameSir environments, but startup is a little slower there.
 - Uses the shared Core project for config, save path handling, and cloud sync.
 
@@ -42,14 +49,15 @@ src\EflayGameSaveManager.Avalonia\publishaot.bat
 
 ### `EflayGameSaveManager.Lazarus`
 
-Lightweight Lazarus/FreePascal UI intended for Winlator.
+Lightweight Lazarus/FreePascal fallback UI.
 
-- Starts faster than the Avalonia UI.
+- Intended as a fallback when the Avalonia app cannot run or starts too slowly in a constrained environment.
 - Reads the existing `GameSaveManager.config.json`.
 - Lists games and current-device save paths.
 - Edits current-device save path and game executable path.
 - Provides local backup, run game, and open folder actions.
-- Prioritizes cloud operations with visible buttons for status, upload, and restore.
+- Supports folder, file, and Windows registry save units.
+- Provides cloud status, upload, restore, and manifest rebuild actions.
 - Implements cloud status/upload/restore directly in Lazarus (S3-compatible requests and signing).
 - Uses external 7-Zip for cloud restore extraction:
   - `7zz.exe` (recommended), or
@@ -125,21 +133,31 @@ The app expects these files near the working directory or a parent directory:
 - `GameSaveManager.runtime.json`: local runtime settings, currently used for `forced_device_name`.
 - `GameSaveManagerLite.config.json` (Lazarus optional): Lite-only overrides such as `settings.forced_device_name` and `settings.seven_zip_dir`.
 
+Save units support `Folder`, `File`, and Windows registry keys via `WinRegistry`.
+
 The cloud backend is configured under `settings.cloud_settings` in `GameSaveManager.config.json`.
 
 The configuration file format is based on the upstream [`mcthesw/game-save-manager`](https://github.com/mcthesw/game-save-manager) project.
 
+For an implementation-oriented guide intended for AI coding assistants and future maintainers, see [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md).
+
 ## Current Recommended Workflow
 
-For normal desktop Windows usage, use the Avalonia project.
+Use the Avalonia app first. It is the main version and can create and maintain `GameSaveManager.config.json` on its own.
 
-For Winlator usage, use the Lazarus Lite UI. Place a supported 7-Zip executable in `src\EflayGameSaveManager.Lazarus\bin` (or configure `settings.seven_zip_dir` in `GameSaveManagerLite.config.json`):
+Run Avalonia after building:
+
+```text
+src\EflayGameSaveManager.Avalonia\bin\Release\net10.0\GameSaveManager.exe
+```
+
+Use the Lazarus Lite UI only as a fallback when Avalonia cannot run in the target environment. For Lazarus cloud restore, place a supported 7-Zip executable in `src\EflayGameSaveManager.Lazarus\bin` (or configure `settings.seven_zip_dir` in `GameSaveManagerLite.config.json`):
 
 ```powershell
 & 'F:\Program\lazarus\lazbuild.exe' --build-mode=Release src\EflayGameSaveManager.Lazarus\GameSaveManagerLite.lpi
 ```
 
-Then run:
+Then run the fallback UI:
 
 ```text
 src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
@@ -150,7 +168,7 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 # Eflay Game Save Manager 中文说明
 
 这是一个游戏存档管理工具，用同一份配置维护本地游戏存档路径和云端备份。
-当前仓库包含多个前端与辅助项目，现阶段面向 Winlator 的主力是 Lazarus 轻量版。
+当前主推版本是 Avalonia 桌面版。它可以独立使用，支持从零创建配置、添加游戏、编辑存档路径和云同步。Lazarus 轻量版保留为备用方案，主要用于 Avalonia 在某些 Winlator 等受限环境中无法运行或启动过慢时尝试。
 
 ## 项目说明
 
@@ -165,7 +183,18 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 
 ### `EflayGameSaveManager.Avalonia`
 
-主力 .NET 桌面版（Windows 常规桌面优先使用）。
+主力 .NET 桌面版（推荐优先使用）。
+
+当前功能：
+- 无需预先存在 `GameSaveManager.config.json`，首次添加游戏后会自动生成配置文件
+- 查看游戏列表、当前设备、存档路径、游戏路径、云状态和云备份历史
+- 在界面中添加新游戏
+- 支持文件夹存档、单文件存档、Windows 注册表存档（`WinRegistry`）
+- 路径可通过选择器选择，也可以手动编辑并使用 `<home>`、`<winLocalAppData>` 等 token
+- 上传当前存档到 S3 兼容云存储
+- 从当前云存档或指定云备份恢复
+- 下载、删除云备份，重建云备份索引
+- 运行配置的游戏可执行文件，打开游戏目录或存档目录
 
 构建：
 ```powershell
@@ -174,11 +203,14 @@ dotnet build src\EflayGameSaveManager.Avalonia\EflayGameSaveManager.Avalonia.csp
 
 ### `EflayGameSaveManager.Lazarus`
 
-面向 Winlator 的轻量 Lazarus/FreePascal 界面。
+轻量 Lazarus/FreePascal 备用界面。
 
 当前状态：
+- 用于 Avalonia 无法运行或启动过慢时尝试
 - 支持本地路径编辑、备份、运行游戏、打开目录
+- 支持文件夹、文件、注册表存档单元
 - 云状态/上传/恢复已在 Lazarus 内置实现（不再依赖 CloudTool）
+- 支持重建云备份索引
 - 云恢复解压依赖外部 7-Zip
 
 7-Zip 支持顺序：
@@ -218,12 +250,17 @@ Lite 独立配置文件：
 - `GameSaveManager.runtime.json`：运行时设置（如 `forced_device_name`）
 - `GameSaveManagerLite.config.json`（Lazarus 可选）：Lite 专用覆盖项（`forced_device_name`、`seven_zip_dir`）
 
+存档单元支持 `Folder`、`File`，以及用 `WinRegistry` 表示的 Windows 注册表键。
+
+面向 AI 编程助手和后续维护者的实现说明见 [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md)。
+
 ## 推荐用法
 
-- 常规 Windows 桌面：使用 Avalonia 版本
-- Winlator：使用 Lazarus 版本，并确保可用的 7-Zip 可执行文件在 `bin` 目录或 `settings.seven_zip_dir` 指定目录
+- 优先使用 Avalonia 版本，它是当前主推版本，可独立创建和维护配置。
+- 只有当 Avalonia 无法运行或在目标环境启动过慢时，再尝试 Lazarus 版本。
+- Lazarus 云恢复需要可用的 7-Zip 可执行文件在 `bin` 目录或 `settings.seven_zip_dir` 指定目录。
 
 运行：
 ```text
-src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
+src\EflayGameSaveManager.Avalonia\bin\Release\net10.0\GameSaveManager.exe
 ```

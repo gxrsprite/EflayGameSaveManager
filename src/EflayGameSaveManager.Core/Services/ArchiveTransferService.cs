@@ -7,6 +7,9 @@ namespace EflayGameSaveManager.Core.Services;
 
 public sealed class ArchiveTransferService
 {
+    private const string RegistryExportFileName = "registry.reg";
+    private readonly WinRegistryTransferService _registryTransferService = new();
+
     public string CreateCurrentDeviceArchive(
         GameSnapshot game,
         CurrentDeviceContext currentDevice,
@@ -24,7 +27,14 @@ public sealed class ArchiveTransferService
                 continue;
             }
 
-            if (!File.Exists(currentPath.Path) && !Directory.Exists(currentPath.Path))
+            if (saveUnit.UnitType == SaveUnitType.WinRegistry)
+            {
+                if (!_registryTransferService.KeyExists(currentPath.Path))
+                {
+                    continue;
+                }
+            }
+            else if (!File.Exists(currentPath.Path) && !Directory.Exists(currentPath.Path))
             {
                 continue;
             }
@@ -32,7 +42,11 @@ public sealed class ArchiveTransferService
             var unitRelativePath = saveUnit.Id.ToString();
             var stagedPath = Path.Combine(stagingDirectory, unitRelativePath);
 
-            if (saveUnit.UnitType == SaveUnitType.File)
+            if (saveUnit.UnitType == SaveUnitType.WinRegistry)
+            {
+                _registryTransferService.ExportKey(currentPath.Path, Path.Combine(stagedPath, RegistryExportFileName));
+            }
+            else if (saveUnit.UnitType == SaveUnitType.File)
             {
                 Directory.CreateDirectory(stagedPath);
                 File.Copy(currentPath.Path, Path.Combine(stagedPath, Path.GetFileName(currentPath.Path)), overwrite: true);
@@ -80,7 +94,11 @@ public sealed class ArchiveTransferService
 
                 if (localUnit.DeleteBeforeApply)
                 {
-                    if (localUnit.UnitType == SaveUnitType.File && File.Exists(localPath.Path))
+                    if (localUnit.UnitType == SaveUnitType.WinRegistry)
+                    {
+                        _registryTransferService.DeleteKey(localPath.Path);
+                    }
+                    else if (localUnit.UnitType == SaveUnitType.File && File.Exists(localPath.Path))
                     {
                         File.Delete(localPath.Path);
                     }
@@ -90,7 +108,15 @@ public sealed class ArchiveTransferService
                     }
                 }
 
-                if (localUnit.UnitType == SaveUnitType.File)
+                if (localUnit.UnitType == SaveUnitType.WinRegistry)
+                {
+                    var registryFile = Directory.EnumerateFiles(sourceRoot, "*.reg").FirstOrDefault();
+                    if (registryFile is not null)
+                    {
+                        _registryTransferService.ImportFile(registryFile);
+                    }
+                }
+                else if (localUnit.UnitType == SaveUnitType.File)
                 {
                     var sourceFile = Directory.EnumerateFiles(sourceRoot).FirstOrDefault();
                     if (sourceFile is null)

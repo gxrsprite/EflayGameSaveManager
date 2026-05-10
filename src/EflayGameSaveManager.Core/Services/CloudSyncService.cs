@@ -101,7 +101,7 @@ public sealed class CloudSyncService
 
         return new GameCloudStatus(
             game.Name,
-            !string.IsNullOrWhiteSpace(currentHead),
+            backups?.Backups.Count > 0,
             GetGameRootKey(cloudSettings, game.Name),
             ParseBackupTimestamp(currentHead),
             backups?.Backups.Count ?? 0,
@@ -131,7 +131,9 @@ public sealed class CloudSyncService
                 item.Size,
                 item.Parent,
                 item.DeviceId,
-                string.Equals(item.Date, currentHead, StringComparison.Ordinal)))
+                string.Equals(item.Date, currentHead, StringComparison.Ordinal),
+                backups.DeviceHeads.TryGetValue(item.DeviceId, out var head) &&
+                string.Equals(item.Date, head, StringComparison.Ordinal)))
             .ToArray();
     }
 
@@ -146,7 +148,7 @@ public sealed class CloudSyncService
         var backups = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken)
                       ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
         var currentBackup = ResolveCurrentBackup(backups, currentDevice.DeviceId)
-                            ?? throw new InvalidOperationException($"No cloud backup head found for '{game.Name}' on device '{currentDevice.DeviceName}'.");
+                            ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
         AppLogger.Info(
             $"Cloud restore-current resolved head: game={game.Name}, device={currentDevice.DeviceId}, backupDate={currentBackup.Date}, backupPath={currentBackup.Path}");
 
@@ -158,6 +160,7 @@ public sealed class CloudSyncService
         CurrentDeviceContext currentDevice,
         CloudSettings cloudSettings,
         string backupDate,
+        string? deviceId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(backupDate))
@@ -167,7 +170,7 @@ public sealed class CloudSyncService
 
         var backups = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken)
                       ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
-        var backup = backups.Backups.FirstOrDefault(item => string.Equals(item.Date, backupDate, StringComparison.Ordinal))
+        var backup = FindBackup(backups, backupDate, deviceId)
                      ?? throw new InvalidOperationException($"Cloud backup not found: {backupDate}");
         AppLogger.Info(
             $"Cloud restore-backup resolved entry: game={game.Name}, backupDate={backupDate}, device={backup.DeviceId}, backupPath={backup.Path}, size={backup.Size}");
@@ -175,10 +178,108 @@ public sealed class CloudSyncService
         return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, backup, cancellationToken);
     }
 
+    public Task<CloudDownloadResult> RestoreGameBackupAsync(
+        GameSnapshot game,
+        CurrentDeviceContext currentDevice,
+        CloudSettings cloudSettings,
+        string backupDate,
+        CancellationToken cancellationToken = default)
+    {
+        return RestoreGameBackupAsync(game, currentDevice, cloudSettings, backupDate, null, cancellationToken);
+    }
+
+    public async Task<CloudManifestRebuildResult> RebuildGameBackupsManifestAsync(
+        GameSnapshot game,
+        CurrentDeviceContext currentDevice,
+        CloudSettings cloudSettings,
+        CancellationToken cancellationToken = default)
+    {
+        var rootKey = GetGameRootKey(cloudSettings, game.Name);
+        var saveDataRootKey = GetSaveDataRootKey(cloudSettings);
+        var existingBackups = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken);
+        var existingByDate = existingBackups?.Backups
+            .GroupBy(item => item.Date, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal)
+            ?? new Dictionary<string, LegacyBackupEntry>(StringComparer.Ordinal);
+
+        var zipObjects = await _storageClient.ListObjectsAsync(
+            cloudSettings.Backend,
+            CloudStoragePathHelper.CombineKey(rootKey, string.Empty),
+            cancellationToken);
+
+        var rebuiltBackups = zipObjects
+            .Where(item => IsGameBackupZipObject(item.Key, rootKey))
+            .Select(item =>
+            {
+                var backupDate = Path.GetFileNameWithoutExtension(item.Key.Replace('\\', '/'));
+                var existing = existingByDate.GetValueOrDefault(backupDate);
+                return new LegacyBackupEntry(
+                    backupDate,
+                    existing?.Describe ?? "Rebuilt from cloud object list",
+                    existing?.Path ?? BuildBackupRelativePath(saveDataRootKey, game.Name, backupDate),
+                    item.Size,
+                    existing?.Parent,
+                    string.IsNullOrWhiteSpace(existing?.DeviceId) ? currentDevice.DeviceId : existing.DeviceId);
+            })
+            .OrderByDescending(item => item.Date, StringComparer.Ordinal)
+            .ToArray();
+
+        if (rebuiltBackups.Length == 0)
+        {
+            throw new InvalidOperationException($"No cloud backup zip files found for '{game.Name}'.");
+        }
+
+        var availableDates = rebuiltBackups.Select(item => item.Date).ToHashSet(StringComparer.Ordinal);
+        var deviceHeads = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (existingBackups is not null)
+        {
+            foreach (var pair in existingBackups.DeviceHeads)
+            {
+                if (availableDates.Contains(pair.Value))
+                {
+                    deviceHeads[pair.Key] = pair.Value;
+                }
+            }
+        }
+
+        foreach (var deviceGroup in rebuiltBackups.GroupBy(item => item.DeviceId, StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(deviceGroup.Key) || deviceHeads.ContainsKey(deviceGroup.Key))
+            {
+                continue;
+            }
+
+            deviceHeads[deviceGroup.Key] = deviceGroup
+                .OrderByDescending(item => item.Date, StringComparer.Ordinal)
+                .First()
+                .Date;
+        }
+
+        var rebuiltManifest = new LegacyGameBackups(
+            game.Name,
+            rebuiltBackups,
+            deviceHeads,
+            existingBackups?.SyncVersion ?? 0);
+
+        var manifestJson = JsonSerializer.Serialize(rebuiltManifest, CloudJsonSerializerContext.LegacyGameBackups);
+        await _storageClient.UploadUtf8JsonAsync(
+            cloudSettings.Backend,
+            CloudStoragePathHelper.CombineKey(rootKey, "Backups.json"),
+            manifestJson,
+            cancellationToken);
+
+        return new CloudManifestRebuildResult(
+            rootKey,
+            rebuiltBackups.Length,
+            rebuiltBackups.Count(item => existingByDate.ContainsKey(item.Date)),
+            DateTimeOffset.UtcNow);
+    }
+
     public async Task<CloudDownloadResult> DownloadGameBackupArchiveAsync(
         GameSnapshot game,
         CloudSettings cloudSettings,
         string backupDate,
+        string? deviceId,
         string destinationPath,
         bool overwrite,
         CancellationToken cancellationToken = default)
@@ -200,7 +301,7 @@ public sealed class CloudSyncService
 
         var backups = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken)
                       ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
-        var backup = backups.Backups.FirstOrDefault(item => string.Equals(item.Date, backupDate, StringComparison.Ordinal))
+        var backup = FindBackup(backups, backupDate, deviceId)
                      ?? throw new InvalidOperationException($"Cloud backup not found: {backupDate}");
         var archiveKey = ResolveArchiveKey(backup, cloudSettings, game.Name);
 
@@ -213,11 +314,23 @@ public sealed class CloudSyncService
             DateTimeOffset.UtcNow);
     }
 
+    public Task<CloudDownloadResult> DownloadGameBackupArchiveAsync(
+        GameSnapshot game,
+        CloudSettings cloudSettings,
+        string backupDate,
+        string destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken = default)
+    {
+        return DownloadGameBackupArchiveAsync(game, cloudSettings, backupDate, null, destinationPath, overwrite, cancellationToken);
+    }
+
     public async Task DeleteGameBackupAsync(
         GameSnapshot game,
         CurrentDeviceContext currentDevice,
         CloudSettings cloudSettings,
         string backupDate,
+        string? deviceId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(backupDate))
@@ -227,36 +340,36 @@ public sealed class CloudSyncService
 
         var backups = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken)
                       ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
-        var backup = backups.Backups.FirstOrDefault(item => string.Equals(item.Date, backupDate, StringComparison.Ordinal))
+        var backup = FindBackup(backups, backupDate, deviceId)
                      ?? throw new InvalidOperationException($"Cloud backup not found: {backupDate}");
         var archiveKey = ResolveArchiveKey(backup, cloudSettings, game.Name);
 
         await _storageClient.DeleteObjectAsync(cloudSettings.Backend, archiveKey, cancellationToken);
 
         var remainingBackups = backups.Backups
-            .Where(item => !string.Equals(item.Date, backupDate, StringComparison.Ordinal))
+            .Where(item => !ReferenceEquals(item, backup))
             .ToArray();
         var deviceHeads = new Dictionary<string, string>(backups.DeviceHeads, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var deviceId in deviceHeads.Keys.ToArray())
+        foreach (var headDeviceId in deviceHeads.Keys.ToArray())
         {
-            if (!string.Equals(deviceHeads[deviceId], backupDate, StringComparison.Ordinal))
+            if (!string.Equals(deviceHeads[headDeviceId], backupDate, StringComparison.Ordinal))
             {
                 continue;
             }
 
             var replacementHead = remainingBackups
-                .Where(item => string.Equals(item.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
+                .Where(item => string.Equals(item.DeviceId, headDeviceId, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(item => item.Date, StringComparer.Ordinal)
                 .FirstOrDefault()?.Date;
 
             if (string.IsNullOrWhiteSpace(replacementHead))
             {
-                deviceHeads.Remove(deviceId);
+                deviceHeads.Remove(headDeviceId);
             }
             else
             {
-                deviceHeads[deviceId] = replacementHead;
+                deviceHeads[headDeviceId] = replacementHead;
             }
         }
 
@@ -273,6 +386,16 @@ public sealed class CloudSyncService
             CloudStoragePathHelper.CombineKey(rootKey, "Backups.json"),
             manifestJson,
             cancellationToken);
+    }
+
+    public Task DeleteGameBackupAsync(
+        GameSnapshot game,
+        CurrentDeviceContext currentDevice,
+        CloudSettings cloudSettings,
+        string backupDate,
+        CancellationToken cancellationToken = default)
+    {
+        return DeleteGameBackupAsync(game, currentDevice, cloudSettings, backupDate, null, cancellationToken);
     }
 
     private async Task<CloudDownloadResult> RestoreGameBackupAsync(
@@ -442,11 +565,16 @@ public sealed class CloudSyncService
     {
         if (backups.DeviceHeads.TryGetValue(deviceId, out var deviceHead) && !string.IsNullOrWhiteSpace(deviceHead))
         {
-            return backups.Backups
+            var headedBackup = backups.Backups
                 .Where(item => string.Equals(item.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(item => string.Equals(item.Date, deviceHead, StringComparison.Ordinal))
                 .ThenByDescending(item => item.Date, StringComparer.Ordinal)
                 .FirstOrDefault();
+
+            if (headedBackup is not null)
+            {
+                return headedBackup;
+            }
         }
 
         var deviceBackup = backups.Backups
@@ -462,6 +590,25 @@ public sealed class CloudSyncService
         return backups.Backups
             .OrderByDescending(item => item.Date, StringComparer.Ordinal)
             .FirstOrDefault();
+    }
+
+    private static LegacyBackupEntry? FindBackup(
+        LegacyGameBackups backups,
+        string backupDate,
+        string? deviceId)
+    {
+        if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            var deviceMatch = backups.Backups.FirstOrDefault(item =>
+                string.Equals(item.Date, backupDate, StringComparison.Ordinal) &&
+                string.Equals(item.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+            if (deviceMatch is not null)
+            {
+                return deviceMatch;
+            }
+        }
+
+        return backups.Backups.FirstOrDefault(item => string.Equals(item.Date, backupDate, StringComparison.Ordinal));
     }
 
     private static LegacyGameBackups? NormalizeGameBackups(LegacyGameBackups? backups, string gameName)
@@ -538,6 +685,22 @@ public sealed class CloudSyncService
     {
         _ = saveDataRootKey;
         return $".\\save_data\\{gameName}\\{timestamp}.zip";
+    }
+
+    private static bool IsGameBackupZipObject(string objectKey, string gameRootKey)
+    {
+        var normalizedKey = objectKey.Replace('\\', '/');
+        var normalizedRoot = gameRootKey.Replace('\\', '/').TrimEnd('/') + "/";
+        if (!normalizedKey.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+            !normalizedKey.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var relativePath = normalizedKey[normalizedRoot.Length..];
+        return !string.IsNullOrWhiteSpace(relativePath) &&
+               !relativePath.Contains('/', StringComparison.Ordinal) &&
+               !string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(relativePath));
     }
 
     private static string ResolveArchiveKey(

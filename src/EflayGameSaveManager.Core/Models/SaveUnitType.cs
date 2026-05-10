@@ -6,5 +6,6 @@ namespace EflayGameSaveManager.Core.Models;
 public enum SaveUnitType
 {
     Folder,
-    File
+    File,
+    WinRegistry
 }

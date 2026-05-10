@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -6,6 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EflayGameSaveManager.Avalonia.Services;
 using EflayGameSaveManager.Core.Models;
 using EflayGameSaveManager.Core.Services;
 
@@ -16,6 +18,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly GameSaveManagerConfigurationService _configurationService;
     private readonly GameLibraryService _gameLibraryService;
     private readonly CloudSyncService _cloudSyncService;
+    private readonly IPathPickerService _pathPickerService;
 
     private ManagerConfig? _currentConfig;
     private AppSnapshot? _currentSnapshot;
@@ -58,6 +61,12 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _hasSelectedGame;
 
     [ObservableProperty]
+    private bool _isGameListView = true;
+
+    [ObservableProperty]
+    private bool _isAddGameView;
+
+    [ObservableProperty]
     private string _selectedGameName = "Select a game";
 
     [ObservableProperty]
@@ -87,18 +96,45 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hasSelectedCloudBackup;
 
+    [ObservableProperty]
+    private string _addGameName = string.Empty;
+
+    [ObservableProperty]
+    private string _addGamePath = string.Empty;
+
+    public string AddGameTokenHelp =>
+        string.Join(
+            Environment.NewLine,
+            [
+                $"<home> = {Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}",
+                $"<winDocuments> = {Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)}",
+                $"<winAppData> = {Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}",
+                $"<winLocalAppData> = {Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}",
+                $"<winLocalAppDataLow> = {Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "LocalLow")}",
+                $"<winCommonAppData> = {Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)}",
+                $"<winCommonDocuments> = {Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments)}",
+                $"<winDesktop> = {Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)}"
+            ]);
+
+    public bool CanCreateGame =>
+        !string.IsNullOrWhiteSpace(AddGameName) &&
+        AddGameSaveUnits.Any(unit => !string.IsNullOrWhiteSpace(unit.Path));
+
     public ObservableCollection<GameListItemViewModel> Games { get; } = [];
     public ObservableCollection<CurrentSavePathEditorViewModel> CurrentDevicePaths { get; } = [];
     public ObservableCollection<CloudBackupItemViewModel> CloudBackups { get; } = [];
+    public ObservableCollection<AddGameSaveUnitEditorViewModel> AddGameSaveUnits { get; } = [];
 
     public MainWindowViewModel(
         GameSaveManagerConfigurationService configurationService,
         GameLibraryService gameLibraryService,
-        CloudSyncService cloudSyncService)
+        CloudSyncService cloudSyncService,
+        IPathPickerService pathPickerService)
     {
         _configurationService = configurationService;
         _gameLibraryService = gameLibraryService;
         _cloudSyncService = cloudSyncService;
+        _pathPickerService = pathPickerService;
     }
 
     public Task InitializeAsync() => ReloadAsync();
@@ -114,10 +150,33 @@ public partial class MainWindowViewModel : ViewModelBase
         _pendingCloudBackupOverwritePath = null;
     }
 
+    partial void OnAddGameNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(CanCreateGame));
+    }
+
     [RelayCommand]
     private void ToggleHeader()
     {
         IsHeaderExpanded = !IsHeaderExpanded;
+    }
+
+    [RelayCommand]
+    private void ShowGameList()
+    {
+        IsGameListView = true;
+        IsAddGameView = false;
+    }
+
+    [RelayCommand]
+    private void ShowAddGame()
+    {
+        IsGameListView = false;
+        IsAddGameView = true;
+        if (AddGameSaveUnits.Count == 0)
+        {
+            AddSaveUnitForNewGame(SaveUnitType.Folder);
+        }
     }
 
     [RelayCommand]
@@ -127,12 +186,26 @@ public partial class MainWindowViewModel : ViewModelBase
             "Loading configuration...",
             async () =>
             {
-                var configPath = _configurationService.FindConfigPath();
-                var config = await _configurationService.LoadAsync(configPath);
+                var configWasCreatedInMemory = false;
+                var configPath = _configurationService.GetDefaultConfigPath();
+                ManagerConfig config;
+                try
+                {
+                    configPath = _configurationService.FindConfigPath();
+                    config = await _configurationService.LoadAsync(configPath);
+                }
+                catch (FileNotFoundException)
+                {
+                    config = _configurationService.CreateDefault();
+                    configWasCreatedInMemory = true;
+                }
+
                 var snapshot = _gameLibraryService.CreateSnapshot(config, configPath);
 
                 ApplySnapshot(config, snapshot);
-                StatusMessage = $"Loaded {Games.Count} games for {snapshot.CurrentDevice.DeviceName}.";
+                StatusMessage = configWasCreatedInMemory
+                    ? $"No config found. A new {GameSaveManagerConfigurationService.ConfigFileName} will be created when you add a game."
+                    : $"Loaded {Games.Count} games for {snapshot.CurrentDevice.DeviceName}.";
             });
     }
 
@@ -207,6 +280,130 @@ public partial class MainWindowViewModel : ViewModelBase
     private void OpenCurrentGameFolder()
     {
         OpenPath(CurrentDeviceGamePath);
+    }
+
+    [RelayCommand]
+    private async Task ChooseCurrentGamePathAsync()
+    {
+        if (!HasSelectedGame)
+        {
+            return;
+        }
+
+        var selectedPath = await _pathPickerService.PickGameExecutablePathAsync(CurrentDeviceGamePath);
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            return;
+        }
+
+        CurrentDeviceGamePath = selectedPath;
+        await SaveCurrentDevicePathsAsync();
+    }
+
+    [RelayCommand]
+    private async Task ChooseAddGamePathAsync()
+    {
+        var selectedPath = await _pathPickerService.PickGameExecutablePathAsync(AddGamePath);
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            return;
+        }
+
+        AddGamePath = selectedPath;
+    }
+
+    [RelayCommand]
+    private void AddFolderSaveUnit()
+    {
+        AddSaveUnitForNewGame(SaveUnitType.Folder);
+    }
+
+    [RelayCommand]
+    private void AddFileSaveUnit()
+    {
+        AddSaveUnitForNewGame(SaveUnitType.File);
+    }
+
+    [RelayCommand]
+    private void AddRegistrySaveUnit()
+    {
+        AddSaveUnitForNewGame(SaveUnitType.WinRegistry);
+    }
+
+    [RelayCommand]
+    private async Task CreateGameAsync()
+    {
+        if (_currentConfig is null || _currentSnapshot is null)
+        {
+            StatusMessage = "Configuration is not loaded yet.";
+            return;
+        }
+
+        var gameName = AddGameName.Trim();
+        if (string.IsNullOrWhiteSpace(gameName))
+        {
+            StatusMessage = "Game name is required.";
+            return;
+        }
+
+        if (_currentConfig.Games.Any(game => string.Equals(game.Name, gameName, StringComparison.OrdinalIgnoreCase)))
+        {
+            StatusMessage = $"Game already exists: {gameName}";
+            return;
+        }
+
+        var units = AddGameSaveUnits
+            .Where(unit => !string.IsNullOrWhiteSpace(unit.Path))
+            .Select((unit, index) => new SaveUnitDefinition
+            {
+                Id = index,
+                UnitType = unit.UnitType,
+                DeleteBeforeApply = false,
+                Paths = new Dictionary<string, string>
+                {
+                    [_currentSnapshot.CurrentDevice.DeviceId] = unit.Path.Trim()
+                }
+            })
+            .ToList();
+
+        if (units.Count == 0)
+        {
+            StatusMessage = "Add at least one save path.";
+            return;
+        }
+
+        await RunBusyAsync(
+            $"Adding game {gameName}...",
+            async () =>
+            {
+                var game = new GameDefinition
+                {
+                    Name = gameName,
+                    SavePaths = units,
+                    GamePaths = string.IsNullOrWhiteSpace(AddGamePath)
+                        ? []
+                        : new Dictionary<string, string>
+                        {
+                            [_currentSnapshot.CurrentDevice.DeviceId] = AddGamePath.Trim()
+                        },
+                    NextSaveUnitId = units.Count,
+                    CloudSyncEnabled = true
+                };
+
+                _currentConfig.Games.Add(game);
+                await _configurationService.SaveAsync(_currentSnapshot.ConfigPath, _currentConfig);
+                var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath);
+                ResetAddGameForm();
+                ApplySnapshot(_currentConfig, refreshedSnapshot, gameName);
+                ShowGameList();
+                StatusMessage = $"Added game: {gameName}.";
+            });
+    }
+
+    [RelayCommand]
+    private void ResetAddGame()
+    {
+        ResetAddGameForm();
     }
 
     [RelayCommand]
@@ -314,6 +511,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     game,
                     cloudSettings,
                     backupDate,
+                    SelectedCloudBackup.DeviceId,
                     destinationPath,
                     overwrite: true);
                 CloudSummary =
@@ -348,10 +546,34 @@ public partial class MainWindowViewModel : ViewModelBase
                     game,
                     snapshot.CurrentDevice,
                     cloudSettings,
-                    backupDate);
+                    backupDate,
+                    SelectedCloudBackup.DeviceId);
                 CloudSummary =
                     $"Restored compressed save from {config.Settings.CloudSettings.Backend.Bucket}/{result.RootKey}";
                 StatusMessage = $"Restored cloud backup {backupDate} for {game.Name}.";
+                await RefreshSelectedGameCloudStatusAsync(forceReload: true);
+            });
+    }
+
+    [RelayCommand]
+    private async Task RebuildSelectedGameCloudBackupsManifestAsync()
+    {
+        if (!TryGetSelectedCloudContext(out var game, out var config, out var snapshot, out var cloudSettings))
+        {
+            return;
+        }
+
+        await RunBusyAsync(
+            $"Rebuilding cloud backup index for {game.Name}...",
+            async () =>
+            {
+                var result = await _cloudSyncService.RebuildGameBackupsManifestAsync(
+                    game,
+                    snapshot.CurrentDevice,
+                    cloudSettings);
+                CloudSummary =
+                    $"Rebuilt Backups.json at {config.Settings.CloudSettings.Backend.Bucket}/{result.RootKey} from {result.BackupCount} zip files";
+                StatusMessage = $"Rebuilt cloud backup index for {game.Name}.";
                 await RefreshSelectedGameCloudStatusAsync(forceReload: true);
             });
     }
@@ -379,7 +601,8 @@ public partial class MainWindowViewModel : ViewModelBase
                     game,
                     snapshot.CurrentDevice,
                     cloudSettings,
-                    backupDate);
+                    backupDate,
+                    SelectedCloudBackup.DeviceId);
                 StatusMessage = $"Deleted cloud backup {backupDate} for {game.Name}.";
                 await RefreshSelectedGameCloudStatusAsync(forceReload: true);
             });
@@ -461,8 +684,43 @@ public partial class MainWindowViewModel : ViewModelBase
                 currentPath.SaveUnitId,
                 currentPath.UnitType,
                 currentPath.Path,
-                OpenPath));
+                OpenPath,
+                _pathPickerService,
+                async () => await SaveCurrentDevicePathsAsync()));
         }
+    }
+
+    private void AddSaveUnitForNewGame(SaveUnitType unitType)
+    {
+        var saveUnit = new AddGameSaveUnitEditorViewModel(
+            AddGameSaveUnits.Count,
+            unitType,
+            string.Empty,
+            _pathPickerService,
+            RemoveAddGameSaveUnit,
+            () => OnPropertyChanged(nameof(CanCreateGame)));
+        AddGameSaveUnits.Add(saveUnit);
+        OnPropertyChanged(nameof(CanCreateGame));
+    }
+
+    private void RemoveAddGameSaveUnit(AddGameSaveUnitEditorViewModel saveUnit)
+    {
+        AddGameSaveUnits.Remove(saveUnit);
+        for (var index = 0; index < AddGameSaveUnits.Count; index++)
+        {
+            AddGameSaveUnits[index].SaveUnitId = index;
+        }
+
+        OnPropertyChanged(nameof(CanCreateGame));
+    }
+
+    private void ResetAddGameForm()
+    {
+        AddGameName = string.Empty;
+        AddGamePath = string.Empty;
+        AddGameSaveUnits.Clear();
+        AddSaveUnitForNewGame(SaveUnitType.Folder);
+        OnPropertyChanged(nameof(CanCreateGame));
     }
 
     private void OpenPath(string path)
@@ -517,8 +775,8 @@ public partial class MainWindowViewModel : ViewModelBase
         var backups = await _cloudSyncService.ListGameBackupsAsync(game, snapshot.CurrentDevice, cloudSettings);
         SelectedGameCloudAvailable = status.IsAvailable;
         SelectedGameCloudState = status.IsAvailable
-            ? $"Cloud backups: {status.BackupCount}, current head: {status.CurrentHead}"
-            : $"Cloud backups: {status.BackupCount}, current head: not found";
+            ? $"Cloud backups across devices: {status.BackupCount}, current device head: {status.CurrentHead ?? "not found"}"
+            : "Cloud backups: 0";
 
         CloudBackups.Clear();
         foreach (var backup in backups)
@@ -527,6 +785,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         SelectedCloudBackup = CloudBackups.FirstOrDefault(item => item.IsCurrentDeviceHead)
+                              ?? CloudBackups.FirstOrDefault(item => item.IsDeviceHead)
                               ?? CloudBackups.FirstOrDefault();
 
         var listItem = Games.FirstOrDefault(item => string.Equals(item.Name, status.GameName, StringComparison.Ordinal));
@@ -668,14 +927,101 @@ public sealed partial class GameListItemViewModel : ObservableObject
     }
 }
 
-public sealed partial class CurrentSavePathEditorViewModel : ObservableObject
+public sealed partial class AddGameSaveUnitEditorViewModel : ObservableObject
 {
-    public CurrentSavePathEditorViewModel(int saveUnitId, SaveUnitType unitType, string path, Action<string> openPath)
+    private readonly IPathPickerService _pathPickerService;
+    private readonly Action<AddGameSaveUnitEditorViewModel> _remove;
+    private readonly Action _pathChanged;
+
+    public AddGameSaveUnitEditorViewModel(
+        int saveUnitId,
+        SaveUnitType unitType,
+        string path,
+        IPathPickerService pathPickerService,
+        Action<AddGameSaveUnitEditorViewModel> remove,
+        Action pathChanged)
     {
         SaveUnitId = saveUnitId;
         UnitType = unitType;
         this.path = path;
+        _pathPickerService = pathPickerService;
+        _remove = remove;
+        _pathChanged = pathChanged;
+        ChoosePathCommand = new AsyncRelayCommand(ChoosePathAsync);
+        RemoveCommand = new RelayCommand(() => _remove(this));
+    }
+
+    [ObservableProperty]
+    private int _saveUnitId;
+
+    public SaveUnitType UnitType { get; }
+
+    public string UnitTypeText => UnitType switch
+    {
+        SaveUnitType.Folder => "Folder",
+        SaveUnitType.File => "File",
+        SaveUnitType.WinRegistry => "WinRegistry",
+        _ => UnitType.ToString()
+    };
+
+    public string PathWatermark => UnitType switch
+    {
+        SaveUnitType.WinRegistry => @"HKEY_CURRENT_USER\Software\GameName",
+        SaveUnitType.File => @"<winLocalAppData>\GameName\save.dat",
+        _ => @"<home>\Saved Games\GameName"
+    };
+
+    public bool CanChoosePath => UnitType != SaveUnitType.WinRegistry;
+
+    public IAsyncRelayCommand ChoosePathCommand { get; }
+
+    public IRelayCommand RemoveCommand { get; }
+
+    [ObservableProperty]
+    private string path;
+
+    partial void OnPathChanged(string value)
+    {
+        _pathChanged();
+    }
+
+    private async Task ChoosePathAsync()
+    {
+        if (!CanChoosePath)
+        {
+            return;
+        }
+
+        var selectedPath = await _pathPickerService.PickSavePathAsync(UnitType, Path);
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            return;
+        }
+
+        Path = selectedPath;
+    }
+}
+
+public sealed partial class CurrentSavePathEditorViewModel : ObservableObject
+{
+    private readonly IPathPickerService _pathPickerService;
+    private readonly Func<Task> _savePathsAsync;
+
+    public CurrentSavePathEditorViewModel(
+        int saveUnitId,
+        SaveUnitType unitType,
+        string path,
+        Action<string> openPath,
+        IPathPickerService pathPickerService,
+        Func<Task> savePathsAsync)
+    {
+        SaveUnitId = saveUnitId;
+        UnitType = unitType;
+        this.path = path;
+        _pathPickerService = pathPickerService;
+        _savePathsAsync = savePathsAsync;
         OpenPathCommand = new RelayCommand(() => openPath(Path));
+        ChoosePathCommand = new AsyncRelayCommand(ChoosePathAsync);
     }
 
     public int SaveUnitId { get; }
@@ -684,8 +1030,22 @@ public sealed partial class CurrentSavePathEditorViewModel : ObservableObject
 
     public IRelayCommand OpenPathCommand { get; }
 
+    public IAsyncRelayCommand ChoosePathCommand { get; }
+
     [ObservableProperty]
     private string path;
+
+    private async Task ChoosePathAsync()
+    {
+        var selectedPath = await _pathPickerService.PickSavePathAsync(UnitType, Path);
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            return;
+        }
+
+        Path = selectedPath;
+        await _savePathsAsync();
+    }
 }
 
 public sealed class CloudBackupItemViewModel
@@ -699,8 +1059,13 @@ public sealed class CloudBackupItemViewModel
         Parent = backup.Parent ?? "-";
         SizeText = FormatSize(backup.Size);
         IsCurrentDeviceHead = backup.IsCurrentDeviceHead;
+        IsDeviceHead = backup.IsDeviceHead;
         Summary = $"{Date} | {SizeText} | device: {DeviceId}";
-        HeadBadge = backup.IsCurrentDeviceHead ? "Current" : string.Empty;
+        HeadBadge = backup.IsCurrentDeviceHead
+            ? "Current Device Head"
+            : backup.IsDeviceHead
+                ? "Device Head"
+                : string.Empty;
     }
 
     public string Date { get; }
@@ -716,6 +1081,8 @@ public sealed class CloudBackupItemViewModel
     public string SizeText { get; }
 
     public bool IsCurrentDeviceHead { get; }
+
+    public bool IsDeviceHead { get; }
 
     public string Summary { get; }
 

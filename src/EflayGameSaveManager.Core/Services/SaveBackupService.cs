@@ -4,6 +4,9 @@ namespace EflayGameSaveManager.Core.Services;
 
 public sealed class SaveBackupService
 {
+    private const string RegistryExportFileName = "registry.reg";
+    private readonly WinRegistryTransferService _registryTransferService = new();
+
     public async Task<string> BackupAsync(
         GameSnapshot game,
         string backupRoot,
@@ -21,7 +24,12 @@ public sealed class SaveBackupService
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (File.Exists(path.Path))
+                if (saveUnit.UnitType == SaveUnitType.WinRegistry && _registryTransferService.KeyExists(path.Path))
+                {
+                    var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, $"unit-{saveUnit.Id}");
+                    _registryTransferService.ExportKey(path.Path, Path.Combine(deviceDirectory, RegistryExportFileName));
+                }
+                else if (File.Exists(path.Path))
                 {
                     var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, $"unit-{saveUnit.Id}");
                     Directory.CreateDirectory(deviceDirectory);

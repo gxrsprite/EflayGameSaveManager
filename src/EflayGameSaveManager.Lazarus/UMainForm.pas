@@ -5,7 +5,7 @@ unit UMainForm;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Grids, Dialogs,
+  Classes, SysUtils, StrUtils, Forms, Controls, StdCtrls, ExtCtrls, Grids, Dialogs,
   Process, fpjson, jsonparser, zipper, UPascalS3Client;
 
 type
@@ -28,9 +28,12 @@ type
     FCloudStatusButton: TButton;
     FCloudUploadButton: TButton;
     FCloudRestoreButton: TButton;
+    FCloudRebuildButton: TButton;
     FRunButton: TButton;
     FOpenGameFolderButton: TButton;
     FOpenSaveFolderButton: TButton;
+    FSelectGamePathButton: TButton;
+    FSelectSavePathButton: TButton;
     FOpenConfigButton: TButton;
     FStartupTimer: TTimer;
     procedure BuildUi;
@@ -49,9 +52,12 @@ type
     procedure CloudStatusClicked(Sender: TObject);
     procedure CloudUploadClicked(Sender: TObject);
     procedure CloudRestoreClicked(Sender: TObject);
+    procedure CloudRebuildClicked(Sender: TObject);
     procedure RunClicked(Sender: TObject);
     procedure OpenGameFolderClicked(Sender: TObject);
     procedure OpenSaveFolderClicked(Sender: TObject);
+    procedure SelectGamePathClicked(Sender: TObject);
+    procedure SelectSavePathClicked(Sender: TObject);
     procedure OpenConfigClicked(Sender: TObject);
     function FindConfigPath: string;
     function ReadRuntimeForcedDeviceName(const ConfigPath: string): string;
@@ -68,13 +74,20 @@ type
     function JsonArray(const Obj: TJSONObject; const AName: string): TJSONArray;
     function JsonObject(const Obj: TJSONObject; const AName: string): TJSONObject;
     function SelectedSavePath: string;
+    function SelectedSaveUnitType: string;
     procedure OpenFolderForPath(const PathValue: string);
     procedure CopyPathToBackup(const SourcePath, DestinationPath: string);
     procedure CopyDirectoryToBackup(const SourceDir, DestinationDir: string);
     procedure CopyFileToBackup(const SourceFile, DestinationFile: string);
+    function RunRegCommand(const Args: array of string): Boolean;
+    function RegistryKeyExists(const RegistryPath: string): Boolean;
+    function ExportRegistryKey(const RegistryPath, DestinationFile: string): Boolean;
+    function ImportRegistryFile(const RegistryFile: string): Boolean;
+    function DeleteRegistryKey(const RegistryPath: string): Boolean;
     procedure RunPascalCloudStatus;
     procedure RunPascalCloudUpload;
     procedure RunPascalCloudRestore;
+    procedure RunPascalCloudRebuildManifest;
     procedure RunCloudTool(const CloudAction: string);
     function Resolve7ZipExecutablePath: string;
     function ReadLiteConfigSevenZipDir: string;
@@ -151,6 +164,7 @@ var
   CloudButtons: TPanel;
   LocalButtons: TPanel;
   PathPanel: TPanel;
+  SavePathPanel: TPanel;
 begin
   Root := TPanel.Create(Self);
   Root.Parent := Self;
@@ -200,27 +214,36 @@ begin
   FCloudStatusButton.Caption := 'Cloud Status';
   FCloudStatusButton.Left := 0;
   FCloudStatusButton.Top := 4;
-  FCloudStatusButton.Width := 120;
+  FCloudStatusButton.Width := 105;
   FCloudStatusButton.Height := 32;
   FCloudStatusButton.OnClick := @CloudStatusClicked;
 
   FCloudUploadButton := TButton.Create(Self);
   FCloudUploadButton.Parent := CloudButtons;
   FCloudUploadButton.Caption := '↑ Upload Current Save To Cloud';
-  FCloudUploadButton.Left := 130;
+  FCloudUploadButton.Left := 112;
   FCloudUploadButton.Top := 4;
-  FCloudUploadButton.Width := 230;
+  FCloudUploadButton.Width := 195;
   FCloudUploadButton.Height := 32;
   FCloudUploadButton.OnClick := @CloudUploadClicked;
 
   FCloudRestoreButton := TButton.Create(Self);
   FCloudRestoreButton.Parent := CloudButtons;
   FCloudRestoreButton.Caption := '↓ Restore Current Cloud Save';
-  FCloudRestoreButton.Left := 370;
+  FCloudRestoreButton.Left := 314;
   FCloudRestoreButton.Top := 4;
-  FCloudRestoreButton.Width := 230;
+  FCloudRestoreButton.Width := 195;
   FCloudRestoreButton.Height := 32;
   FCloudRestoreButton.OnClick := @CloudRestoreClicked;
+
+  FCloudRebuildButton := TButton.Create(Self);
+  FCloudRebuildButton.Parent := CloudButtons;
+  FCloudRebuildButton.Caption := 'Rebuild Index';
+  FCloudRebuildButton.Left := 516;
+  FCloudRebuildButton.Top := 4;
+  FCloudRebuildButton.Width := 125;
+  FCloudRebuildButton.Height := 32;
+  FCloudRebuildButton.OnClick := @CloudRebuildClicked;
 
   FReloadButton := TButton.Create(Self);
   FReloadButton.Parent := LocalButtons;
@@ -254,26 +277,10 @@ begin
   FRunButton.Width := 90;
   FRunButton.OnClick := @RunClicked;
 
-  FOpenGameFolderButton := TButton.Create(Self);
-  FOpenGameFolderButton.Parent := LocalButtons;
-  FOpenGameFolderButton.Caption := 'Game Folder';
-  FOpenGameFolderButton.Left := 404;
-  FOpenGameFolderButton.Top := 4;
-  FOpenGameFolderButton.Width := 98;
-  FOpenGameFolderButton.OnClick := @OpenGameFolderClicked;
-
-  FOpenSaveFolderButton := TButton.Create(Self);
-  FOpenSaveFolderButton.Parent := LocalButtons;
-  FOpenSaveFolderButton.Caption := 'Save Folder';
-  FOpenSaveFolderButton.Left := 508;
-  FOpenSaveFolderButton.Top := 4;
-  FOpenSaveFolderButton.Width := 96;
-  FOpenSaveFolderButton.OnClick := @OpenSaveFolderClicked;
-
   FOpenConfigButton := TButton.Create(Self);
   FOpenConfigButton.Parent := LocalButtons;
   FOpenConfigButton.Caption := 'Config';
-  FOpenConfigButton.Left := 610;
+  FOpenConfigButton.Left := 404;
   FOpenConfigButton.Top := 4;
   FOpenConfigButton.Width := 70;
   FOpenConfigButton.OnClick := @OpenConfigClicked;
@@ -300,6 +307,40 @@ begin
   FGamePathEdit := TEdit.Create(Self);
   FGamePathEdit.Parent := PathPanel;
   FGamePathEdit.Align := alClient;
+
+  FSelectGamePathButton := TButton.Create(Self);
+  FSelectGamePathButton.Parent := PathPanel;
+  FSelectGamePathButton.Align := alRight;
+  FSelectGamePathButton.Caption := 'Select Path';
+  FSelectGamePathButton.Width := 92;
+  FSelectGamePathButton.OnClick := @SelectGamePathClicked;
+
+  FOpenGameFolderButton := TButton.Create(Self);
+  FOpenGameFolderButton.Parent := PathPanel;
+  FOpenGameFolderButton.Align := alRight;
+  FOpenGameFolderButton.Caption := 'Open Folder';
+  FOpenGameFolderButton.Width := 92;
+  FOpenGameFolderButton.OnClick := @OpenGameFolderClicked;
+
+  SavePathPanel := TPanel.Create(Self);
+  SavePathPanel.Parent := RightPanel;
+  SavePathPanel.Align := alTop;
+  SavePathPanel.Height := 34;
+  SavePathPanel.Caption := '';
+
+  FSelectSavePathButton := TButton.Create(Self);
+  FSelectSavePathButton.Parent := SavePathPanel;
+  FSelectSavePathButton.Align := alRight;
+  FSelectSavePathButton.Caption := 'Select Path';
+  FSelectSavePathButton.Width := 92;
+  FSelectSavePathButton.OnClick := @SelectSavePathClicked;
+
+  FOpenSaveFolderButton := TButton.Create(Self);
+  FOpenSaveFolderButton.Parent := SavePathPanel;
+  FOpenSaveFolderButton.Align := alRight;
+  FOpenSaveFolderButton.Caption := 'Open Folder';
+  FOpenSaveFolderButton.Width := 92;
+  FOpenSaveFolderButton.OnClick := @OpenSaveFolderClicked;
 
   FSaveGrid := TStringGrid.Create(Self);
   FSaveGrid.Parent := RightPanel;
@@ -555,6 +596,11 @@ begin
   RunPascalCloudRestore;
 end;
 
+procedure TMainForm.CloudRebuildClicked(Sender: TObject);
+begin
+  RunPascalCloudRebuildManifest;
+end;
+
 procedure TMainForm.RunClicked(Sender: TObject);
 var
   Proc: TProcess;
@@ -593,6 +639,88 @@ end;
 procedure TMainForm.OpenSaveFolderClicked(Sender: TObject);
 begin
   OpenFolderForPath(SelectedSavePath);
+end;
+
+procedure TMainForm.SelectGamePathClicked(Sender: TObject);
+var
+  Dialog: TOpenDialog;
+  SelectedPath: string;
+begin
+  if FSelectedGame = nil then
+    Exit;
+
+  Dialog := TOpenDialog.Create(Self);
+  try
+    Dialog.Title := 'Select Game Executable';
+    Dialog.Filter := 'Executable files|*.exe;*.bat;*.cmd|All files|*.*';
+    SelectedPath := Trim(FGamePathEdit.Text);
+    if FileExists(SelectedPath) then
+    begin
+      Dialog.InitialDir := ExtractFileDir(SelectedPath);
+      Dialog.FileName := ExtractFileName(SelectedPath);
+    end
+    else if DirectoryExists(SelectedPath) then
+      Dialog.InitialDir := SelectedPath;
+
+    if Dialog.Execute then
+    begin
+      FGamePathEdit.Text := Dialog.FileName;
+      SaveCurrentDevicePaths;
+    end;
+  finally
+    Dialog.Free;
+  end;
+end;
+
+procedure TMainForm.SelectSavePathClicked(Sender: TObject);
+var
+  Dialog: TOpenDialog;
+  SelectedPath: string;
+begin
+  if FSelectedGame = nil then
+    Exit;
+
+  if FSaveGrid.RowCount <= 1 then
+  begin
+    SetStatus('No save path is available for the selected game.');
+    Exit;
+  end;
+
+  if FSaveGrid.Row <= 0 then
+    FSaveGrid.Row := 1;
+
+  if SameText(SelectedSaveUnitType, 'File') then
+  begin
+    Dialog := TOpenDialog.Create(Self);
+    try
+      Dialog.Title := 'Select Save File';
+      SelectedPath := SelectedSavePath;
+      if FileExists(SelectedPath) then
+      begin
+        Dialog.InitialDir := ExtractFileDir(SelectedPath);
+        Dialog.FileName := ExtractFileName(SelectedPath);
+      end
+      else if DirectoryExists(SelectedPath) then
+        Dialog.InitialDir := SelectedPath;
+
+      if Dialog.Execute then
+      begin
+        FSaveGrid.Cells[2, FSaveGrid.Row] := Dialog.FileName;
+        SaveCurrentDevicePaths;
+      end;
+    finally
+      Dialog.Free;
+    end;
+  end
+  else
+  begin
+    SelectedPath := SelectedSavePath;
+    if SelectDirectory('Select Save Folder', '', SelectedPath) then
+    begin
+      FSaveGrid.Cells[2, FSaveGrid.Row] := SelectedPath;
+      SaveCurrentDevicePaths;
+    end;
+  end;
 end;
 
 procedure TMainForm.OpenConfigClicked(Sender: TObject);
@@ -975,6 +1103,15 @@ begin
     Result := FSaveGrid.Cells[2, 1];
 end;
 
+function TMainForm.SelectedSaveUnitType: string;
+begin
+  Result := '';
+  if FSaveGrid.Row > 0 then
+    Result := FSaveGrid.Cells[1, FSaveGrid.Row]
+  else if FSaveGrid.RowCount > 1 then
+    Result := FSaveGrid.Cells[1, 1];
+end;
+
 procedure TMainForm.OpenFolderForPath(const PathValue: string);
 var
   Target: string;
@@ -1066,6 +1203,56 @@ begin
   end;
 end;
 
+function TMainForm.RunRegCommand(const Args: array of string): Boolean;
+var
+  Proc: TProcess;
+  I: Integer;
+begin
+  Result := False;
+  Proc := TProcess.Create(nil);
+  try
+    Proc.Executable := 'reg.exe';
+    for I := Low(Args) to High(Args) do
+      Proc.Parameters.Add(Args[I]);
+    Proc.Options := [poWaitOnExit];
+    Proc.Execute;
+    Result := Proc.ExitStatus = 0;
+  finally
+    Proc.Free;
+  end;
+end;
+
+function TMainForm.RegistryKeyExists(const RegistryPath: string): Boolean;
+begin
+  Result := (Trim(RegistryPath) <> '') and RunRegCommand(['query', RegistryPath]);
+end;
+
+function TMainForm.ExportRegistryKey(const RegistryPath, DestinationFile: string): Boolean;
+begin
+  Result := False;
+  if Trim(RegistryPath) = '' then
+    Exit;
+  ForceDirectories(ExtractFileDir(DestinationFile));
+  if FileExists(DestinationFile) then
+    DeleteFile(DestinationFile);
+  Result := RunRegCommand(['export', RegistryPath, DestinationFile, '/y']) and FileExists(DestinationFile);
+end;
+
+function TMainForm.ImportRegistryFile(const RegistryFile: string): Boolean;
+begin
+  Result := FileExists(RegistryFile) and RunRegCommand(['import', RegistryFile]);
+end;
+
+function TMainForm.DeleteRegistryKey(const RegistryPath: string): Boolean;
+begin
+  Result := False;
+  if Trim(RegistryPath) = '' then
+    Exit;
+  if not RegistryKeyExists(RegistryPath) then
+    Exit;
+  Result := RunRegCommand(['delete', RegistryPath, '/f']);
+end;
+
 procedure TMainForm.RunPascalCloudStatus;
 var
   Settings: TJSONObject;
@@ -1079,7 +1266,9 @@ var
   Backups: TJSONArray;
   DeviceHeads: TJSONObject;
   CurrentHead: string;
+  HeadDeviceId: string;
   I: Integer;
+  HeadIndex: Integer;
   Backup: TJSONObject;
   Line: string;
 begin
@@ -1149,7 +1338,17 @@ begin
                 IntToStr(Backup.Get('size', 0)) + ' B | device: ' +
                 Backup.Get('device_id', '-');
               if (CurrentHead <> '') and SameText(Backup.Get('date', ''), CurrentHead) then
-                Line += ' | current';
+                Line += ' | current device head';
+              if DeviceHeads <> nil then
+              begin
+                for HeadIndex := 0 to DeviceHeads.Count - 1 do
+                begin
+                  HeadDeviceId := DeviceHeads.Names[HeadIndex];
+                  if SameText(Backup.Get('device_id', ''), HeadDeviceId) and
+                    (Backup.Get('date', '') = DeviceHeads.Get(HeadDeviceId, '')) then
+                    Line += ' | device head';
+                end;
+              end;
               FInfo.Lines.Add(Line);
             end;
           end;
@@ -1297,6 +1496,240 @@ begin
     Value := TJSONObject.Create;
     Obj.Add(AName, Value);
   end;
+end;
+
+function StringEndsWithText(const Value, Suffix: string): Boolean;
+begin
+  Result := (Length(Value) >= Length(Suffix)) and
+    SameText(Copy(Value, Length(Value) - Length(Suffix) + 1, Length(Suffix)), Suffix);
+end;
+
+function IsDirectBackupZipObject(const ObjectKey, RootKey: string): Boolean;
+var
+  NormalizedKey: string;
+  NormalizedRoot: string;
+  RelativePath: string;
+begin
+  NormalizedKey := StringReplace(ObjectKey, '\', '/', [rfReplaceAll]);
+  NormalizedRoot := CombineCloudKey([RootKey]) + '/';
+  Result := False;
+  if (not SameText(Copy(NormalizedKey, 1, Length(NormalizedRoot)), NormalizedRoot)) or
+     (not StringEndsWithText(NormalizedKey, '.zip')) then
+    Exit;
+
+  RelativePath := Copy(NormalizedKey, Length(NormalizedRoot) + 1, MaxInt);
+  Result := (RelativePath <> '') and (Pos('/', RelativePath) = 0) and
+    (ChangeFileExt(ExtractFileName(RelativePath), '') <> '');
+end;
+
+function BackupDateFromObjectKey(const ObjectKey: string): string;
+var
+  NormalizedKey: string;
+  SlashPos: SizeInt;
+  FileName: string;
+begin
+  NormalizedKey := StringReplace(ObjectKey, '\', '/', [rfReplaceAll]);
+  SlashPos := RPos('/', NormalizedKey);
+  if SlashPos > 0 then
+    FileName := Copy(NormalizedKey, SlashPos + 1, MaxInt)
+  else
+    FileName := NormalizedKey;
+  Result := ChangeFileExt(FileName, '');
+end;
+
+function BuildBackupRelativePath(const GameName, BackupDate: string): string;
+begin
+  Result := '.\save_data\' + GameName + '\' + BackupDate + '.zip';
+end;
+
+function FindBackupByDate(const Backups: TJSONArray; const BackupDate: string): TJSONObject;
+var
+  I: Integer;
+  Candidate: TJSONObject;
+begin
+  Result := nil;
+  if Backups = nil then
+    Exit;
+
+  for I := 0 to Backups.Count - 1 do
+  begin
+    Candidate := Backups.Objects[I];
+    if Candidate.Get('date', '') = BackupDate then
+      Exit(Candidate);
+  end;
+end;
+
+procedure TMainForm.RunPascalCloudRebuildManifest;
+var
+  Settings: TJSONObject;
+  CloudSettings: TJSONObject;
+  Backend: TS3Backend;
+  GameName: string;
+  RootKey: string;
+  ManifestKey: string;
+  ManifestContent: string;
+  ManifestJson: string;
+  ErrorContent: string;
+  StatusCode: Integer;
+  Objects: TS3ObjectInfoArray;
+  Parser: TJSONParser;
+  OldManifest: TJSONObject;
+  OldBackups: TJSONArray;
+  OldDeviceHeads: TJSONObject;
+  Manifest: TJSONObject;
+  Backups: TJSONArray;
+  DeviceHeads: TJSONObject;
+  Entry: TJSONObject;
+  Existing: TJSONObject;
+  BackupDate: string;
+  DeviceId: string;
+  I: Integer;
+  J: Integer;
+  ZipCount: Integer;
+  PreservedCount: Integer;
+  BestDate: string;
+  ExistingHeadDate: string;
+begin
+  if FSelectedGame = nil then
+  begin
+    SetStatus('No game selected.');
+    Exit;
+  end;
+
+  OldManifest := nil;
+  try
+    Settings := JsonObject(FConfig, 'settings');
+    CloudSettings := JsonObject(Settings, 'cloud_settings');
+    Backend := ReadS3Backend(CloudSettings);
+    GameName := GetGameName(FSelectedGame);
+    RootKey := CombineCloudKey([CloudSettings.Get('root_path', ''), 'save_data', GameName]);
+    ManifestKey := CombineCloudKey([RootKey, 'Backups.json']);
+
+    SetStatus('Listing cloud backup zip files with Pascal S3 client...');
+    if not TPascalS3Client.TryListObjects(Backend, RootKey + '/', Objects, ErrorContent, StatusCode) then
+      raise Exception.Create('Cloud object list failed: HTTP ' + IntToStr(StatusCode) + ' ' + ErrorContent);
+
+    if TPascalS3Client.TryDownloadUtf8String(Backend, ManifestKey, ManifestContent, StatusCode) then
+    begin
+      Parser := TJSONParser.Create(ManifestContent);
+      try
+        OldManifest := Parser.Parse as TJSONObject;
+      finally
+        Parser.Free;
+      end;
+    end
+    else if StatusCode <> 404 then
+      raise Exception.Create('Cloud manifest request failed: HTTP ' + IntToStr(StatusCode) + ' ' + ManifestContent);
+
+    OldBackups := nil;
+    OldDeviceHeads := nil;
+    if OldManifest <> nil then
+    begin
+      OldManifest.Find('backups', OldBackups);
+      OldManifest.Find('device_heads', OldDeviceHeads);
+    end;
+
+    Manifest := TJSONObject.Create;
+    try
+      Manifest.Add('name', GameName);
+      if OldManifest <> nil then
+        Manifest.Add('sync_version', OldManifest.Get('sync_version', 0))
+      else
+        Manifest.Add('sync_version', 0);
+      Backups := TJSONArray.Create;
+      DeviceHeads := TJSONObject.Create;
+      Manifest.Add('backups', Backups);
+      Manifest.Add('device_heads', DeviceHeads);
+
+      ZipCount := 0;
+      PreservedCount := 0;
+      for I := 0 to Length(Objects) - 1 do
+      begin
+        if not IsDirectBackupZipObject(Objects[I].Key, RootKey) then
+          Continue;
+
+        BackupDate := BackupDateFromObjectKey(Objects[I].Key);
+        Existing := FindBackupByDate(OldBackups, BackupDate);
+        Entry := TJSONObject.Create;
+        Entry.Add('date', BackupDate);
+        if Existing <> nil then
+        begin
+          Entry.Add('describe', Existing.Get('describe', ''));
+          Entry.Add('path', Existing.Get('path', BuildBackupRelativePath(GameName, BackupDate)));
+          if Existing.Get('parent', '') <> '' then
+            Entry.Add('parent', Existing.Get('parent', ''));
+          DeviceId := Existing.Get('device_id', FCurrentDeviceId);
+          Inc(PreservedCount);
+        end
+        else
+        begin
+          Entry.Add('describe', 'Rebuilt from cloud object list');
+          Entry.Add('path', BuildBackupRelativePath(GameName, BackupDate));
+          DeviceId := FCurrentDeviceId;
+        end;
+        Entry.Add('size', Objects[I].Size);
+        Entry.Add('device_id', DeviceId);
+        Backups.Add(Entry);
+        Inc(ZipCount);
+      end;
+
+      if ZipCount = 0 then
+        raise Exception.Create('No cloud backup zip files found for ' + GameName + '.');
+
+      if OldDeviceHeads <> nil then
+      begin
+        for I := 0 to OldDeviceHeads.Count - 1 do
+        begin
+          DeviceId := OldDeviceHeads.Names[I];
+          ExistingHeadDate := OldDeviceHeads.Get(DeviceId, '');
+          if FindBackupByDate(Backups, ExistingHeadDate) <> nil then
+            DeviceHeads.Strings[DeviceId] := ExistingHeadDate;
+        end;
+      end;
+
+      for I := 0 to Backups.Count - 1 do
+      begin
+        Entry := Backups.Objects[I];
+        DeviceId := Entry.Get('device_id', '');
+        if (DeviceId = '') or (DeviceHeads.Get(DeviceId, '') <> '') then
+          Continue;
+
+        BestDate := Entry.Get('date', '');
+        for J := I + 1 to Backups.Count - 1 do
+        begin
+          if SameText(Backups.Objects[J].Get('device_id', ''), DeviceId) and
+             (CompareText(Backups.Objects[J].Get('date', ''), BestDate) > 0) then
+            BestDate := Backups.Objects[J].Get('date', '');
+        end;
+        DeviceHeads.Strings[DeviceId] := BestDate;
+      end;
+
+      ManifestJson := Manifest.FormatJSON;
+    finally
+      Manifest.Free;
+    end;
+
+    SetStatus('Uploading rebuilt cloud manifest with Pascal S3 client...');
+    if not TPascalS3Client.TryUploadUtf8String(Backend, ManifestKey, ManifestJson, ErrorContent, StatusCode) then
+      raise Exception.Create('Cloud manifest upload failed: HTTP ' + IntToStr(StatusCode) + ' ' + ErrorContent);
+
+    FInfo.Lines.Clear;
+    FInfo.Lines.Add('Pascal cloud manifest rebuild completed.');
+    FInfo.Lines.Add('Game: ' + GameName);
+    FInfo.Lines.Add('Object: ' + ManifestKey);
+    FInfo.Lines.Add('Zip files: ' + IntToStr(ZipCount));
+    FInfo.Lines.Add('Preserved old entries: ' + IntToStr(PreservedCount));
+    SetStatus('Pascal cloud manifest rebuild completed.');
+  except
+    on E: Exception do
+    begin
+      FInfo.Lines.Clear;
+      FInfo.Lines.Add(E.Message);
+      SetStatus('Pascal cloud manifest rebuild failed.');
+    end;
+  end;
+
+  OldManifest.Free;
 end;
 
 procedure TMainForm.RunPascalCloudUpload;
@@ -1451,9 +1884,14 @@ begin
     SaveUnit := SavePaths.Objects[I];
     Paths := JsonObject(SaveUnit, 'paths');
     SourcePath := ResolvePathTokens(GetCurrentDevicePath(Paths));
-    if (SourcePath = '') or ((not FileExists(SourcePath)) and (not DirectoryExists(SourcePath))) then
-      Continue;
     UnitType := SaveUnit.Get('unit_type', '');
+    if SameText(UnitType, 'WinRegistry') then
+    begin
+      if (SourcePath = '') or (not RegistryKeyExists(SourcePath)) then
+        Continue;
+    end
+    else if (SourcePath = '') or ((not FileExists(SourcePath)) and (not DirectoryExists(SourcePath))) then
+      Continue;
     StagedPath := IncludeTrailingPathDelimiter(StagingRoot) + IntToStr(SaveUnit.Get('id', I));
     StageSaveUnit(SourcePath, StagedPath, UnitType);
   end;
@@ -1474,7 +1912,9 @@ end;
 
 procedure TMainForm.StageSaveUnit(const SourcePath, StagedPath, UnitType: string);
 begin
-  if SameText(UnitType, 'File') then
+  if SameText(UnitType, 'WinRegistry') then
+    ExportRegistryKey(SourcePath, IncludeTrailingPathDelimiter(StagedPath) + 'registry.reg')
+  else if SameText(UnitType, 'File') then
   begin
     ForceDirectories(StagedPath);
     CopyFileToBackup(SourcePath, IncludeTrailingPathDelimiter(StagedPath) + ExtractFileName(SourcePath));
@@ -1563,7 +2003,7 @@ begin
 
         Backup := ResolveCurrentCloudBackup(Backups, DeviceHeads);
         if Backup = nil then
-          raise Exception.Create('No current cloud backup found for this device.');
+          raise Exception.Create('No cloud backup found for this game.');
         ArchiveKey := ResolveArchiveKey(CloudSettings, Backup);
       finally
         Manifest.Free;
@@ -1630,56 +2070,16 @@ end;
 
 function TMainForm.ResolveCurrentCloudBackup(const Backups: TJSONArray; const DeviceHeads: TJSONObject): TJSONObject;
 var
-  CurrentHead: string;
   I: Integer;
   Backup: TJSONObject;
   BestDate: string;
   BackupDate: string;
-  DeviceId: string;
 begin
   Result := nil;
   if Backups = nil then
     Exit;
 
-  CurrentHead := '';
-  if DeviceHeads <> nil then
-    CurrentHead := DeviceHeads.Get(FCurrentDeviceId, '');
-
-  if CurrentHead <> '' then
-  begin
-    for I := 0 to Backups.Count - 1 do
-    begin
-      Backup := Backups.Objects[I];
-      BackupDate := BackupString(Backup, 'date', '');
-      DeviceId := BackupString(Backup, 'device_id', '');
-      if SameText(DeviceId, FCurrentDeviceId) and (BackupDate = CurrentHead) then
-        Exit(Backup);
-    end;
-
-    for I := 0 to Backups.Count - 1 do
-    begin
-      Backup := Backups.Objects[I];
-      if BackupString(Backup, 'date', '') = CurrentHead then
-        Exit(Backup);
-    end;
-  end;
-
   BestDate := '';
-  for I := 0 to Backups.Count - 1 do
-  begin
-    Backup := Backups.Objects[I];
-    DeviceId := BackupString(Backup, 'device_id', '');
-    BackupDate := BackupString(Backup, 'date', '');
-    if SameText(DeviceId, FCurrentDeviceId) and ((Result = nil) or (CompareText(BackupDate, BestDate) > 0)) then
-    begin
-      Result := Backup;
-      BestDate := BackupDate;
-    end;
-  end;
-
-  if Result <> nil then
-    Exit;
-
   for I := 0 to Backups.Count - 1 do
   begin
     Backup := Backups.Objects[I];
@@ -1812,9 +2212,31 @@ var
   SourceFile: string;
 begin
   if DeleteBeforeApply then
-    DeletePathRecursive(TargetPath);
+  begin
+    if SameText(UnitType, 'WinRegistry') then
+      DeleteRegistryKey(TargetPath)
+    else
+      DeletePathRecursive(TargetPath);
+  end;
 
-  if SameText(UnitType, 'File') then
+  if SameText(UnitType, 'WinRegistry') then
+  begin
+    if FindFirst(IncludeTrailingPathDelimiter(SourceRoot) + '*.reg', faAnyFile, Search) <> 0 then
+      Exit;
+    try
+      repeat
+        if (Search.Name = '.') or (Search.Name = '..') then
+          Continue;
+        if (Search.Attr and faDirectory) <> 0 then
+          Continue;
+        ImportRegistryFile(IncludeTrailingPathDelimiter(SourceRoot) + Search.Name);
+        Exit;
+      until FindNext(Search) <> 0;
+    finally
+      FindClose(Search);
+    end;
+  end
+  else if SameText(UnitType, 'File') then
   begin
     if FindFirst(IncludeTrailingPathDelimiter(SourceRoot) + '*', faAnyFile, Search) <> 0 then
       Exit;

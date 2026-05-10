@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using Avalonia.Markup.Xaml;
+using EflayGameSaveManager.Avalonia.Services;
 using EflayGameSaveManager.Avalonia.ViewModels;
 using EflayGameSaveManager.Avalonia.Views;
 using EflayGameSaveManager.Core.Services;
@@ -34,12 +35,12 @@ public partial class App : Application
                 new S3CompatibleCloudStorageClient(),
                 new SaveBackupService(),
                 new ArchiveTransferService());
-            var viewModel = new MainWindowViewModel(configurationService, gameLibraryService, cloudSyncService);
+            var mainWindow = new MainWindow();
+            var pathPickerService = new AvaloniaPathPickerService(mainWindow);
+            var viewModel = new MainWindowViewModel(configurationService, gameLibraryService, cloudSyncService, pathPickerService);
 
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = viewModel,
-            };
+            mainWindow.DataContext = viewModel;
+            desktop.MainWindow = mainWindow;
 
             _ = viewModel.InitializeAsync();
         }

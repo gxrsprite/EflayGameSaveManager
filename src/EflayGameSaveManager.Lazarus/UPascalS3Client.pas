@@ -16,8 +16,31 @@ type
     SecretAccessKey: string;
   end;
 
+  TS3ObjectInfo = record
+    Key: string;
+    Size: Int64;
+  end;
+
+  TS3ObjectInfoArray = array of TS3ObjectInfo;
+
   TPascalS3Client = class
+  private
+    class function TryListObjectsPage(
+      const Backend: TS3Backend;
+      const Prefix: string;
+      const ContinuationToken: string;
+      out Objects: TS3ObjectInfoArray;
+      out IsTruncated: Boolean;
+      out NextContinuationToken: string;
+      out ErrorContent: string;
+      out StatusCode: Integer): Boolean; static;
   public
+    class function TryListObjects(
+      const Backend: TS3Backend;
+      const Prefix: string;
+      out Objects: TS3ObjectInfoArray;
+      out ErrorContent: string;
+      out StatusCode: Integer): Boolean; static;
     class function TryDownloadUtf8String(
       const Backend: TS3Backend;
       const ObjectKey: string;
@@ -49,7 +72,7 @@ function ReadS3Backend(const CloudSettings: TJSONObject): TS3Backend;
 implementation
 
 uses
-  DateUtils, fphttpclient, URIParser, USha256;
+  DateUtils, DOM, fphttpclient, URIParser, XMLRead, USha256;
 
 const
   EmptyPayloadHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
@@ -162,6 +185,22 @@ begin
   Result := EndpointUri.Protocol + '://' + BuildHostHeader(EndpointUri) + CanonicalUri;
 end;
 
+function BuildRequestUrlWithQuery(const EndpointUri: TURI; const CanonicalUri, CanonicalQueryString: string): string;
+begin
+  Result := BuildRequestUrl(EndpointUri, CanonicalUri);
+  if CanonicalQueryString <> '' then
+    Result += '?' + CanonicalQueryString;
+end;
+
+function BuildCanonicalQueryString(const Prefix, ContinuationToken: string): string;
+begin
+  if ContinuationToken <> '' then
+    Result := 'continuation-token=' + PercentEncode(ContinuationToken) + '&'
+  else
+    Result := '';
+  Result += 'list-type=2&prefix=' + PercentEncode(Prefix);
+end;
+
 function AmzTimestamp(out ShortDate: string): string;
 var
   UtcNow: TDateTime;
@@ -208,6 +247,64 @@ begin
   begin
     Stream.Position := 0;
     Stream.ReadBuffer(Result[1], Stream.Size);
+  end;
+end;
+
+function XmlChildText(const Node: TDOMNode; const ChildName: string): string;
+var
+  Child: TDOMNode;
+begin
+  Result := '';
+  Child := Node.FirstChild;
+  while Child <> nil do
+  begin
+    if SameText(Child.NodeName, ChildName) then
+      Exit(Child.TextContent);
+    Child := Child.NextSibling;
+  end;
+end;
+
+procedure ParseListObjectsXml(
+  const Xml: string;
+  out Objects: TS3ObjectInfoArray;
+  out IsTruncated: Boolean;
+  out NextContinuationToken: string);
+var
+  Stream: TStringStream;
+  Document: TXMLDocument;
+  Node: TDOMNode;
+  Count: Integer;
+  SizeValue: string;
+begin
+  SetLength(Objects, 0);
+  IsTruncated := False;
+  NextContinuationToken := '';
+
+  Stream := TStringStream.Create(Xml);
+  Document := nil;
+  try
+    ReadXMLFile(Document, Stream);
+    Node := Document.DocumentElement.FirstChild;
+    Count := 0;
+    while Node <> nil do
+    begin
+      if SameText(Node.NodeName, 'Contents') then
+      begin
+        SetLength(Objects, Count + 1);
+        Objects[Count].Key := XmlChildText(Node, 'Key');
+        SizeValue := XmlChildText(Node, 'Size');
+        Objects[Count].Size := StrToInt64Def(SizeValue, 0);
+        Inc(Count);
+      end
+      else if SameText(Node.NodeName, 'IsTruncated') then
+        IsTruncated := SameText(Trim(Node.TextContent), 'true')
+      else if SameText(Node.NodeName, 'NextContinuationToken') then
+        NextContinuationToken := Node.TextContent;
+      Node := Node.NextSibling;
+    end;
+  finally
+    Document.Free;
+    Stream.Free;
   end;
 end;
 
@@ -347,6 +444,146 @@ end;
 function BuildGameBackupsKey(const CloudSettings: TJSONObject; const GameName: string): string;
 begin
   Result := CombineKey([CloudSettings.Get('root_path', ''), 'save_data', GameName, 'Backups.json']);
+end;
+
+class function TPascalS3Client.TryListObjectsPage(
+  const Backend: TS3Backend;
+  const Prefix: string;
+  const ContinuationToken: string;
+  out Objects: TS3ObjectInfoArray;
+  out IsTruncated: Boolean;
+  out NextContinuationToken: string;
+  out ErrorContent: string;
+  out StatusCode: Integer): Boolean;
+var
+  EndpointUri: TURI;
+  CanonicalUri: string;
+  CanonicalQueryString: string;
+  RequestUrl: string;
+  HostHeader: string;
+  ShortDate: string;
+  AmzDate: string;
+  CredentialScope: string;
+  CanonicalHeaders: string;
+  SignedHeaders: string;
+  CanonicalRequest: string;
+  StringToSign: string;
+  Signature: string;
+  Client: TFPHTTPClient;
+  Response: TRawByteStringStream;
+begin
+  Result := False;
+  SetLength(Objects, 0);
+  IsTruncated := False;
+  NextContinuationToken := '';
+  ErrorContent := '';
+  StatusCode := 0;
+
+  EndpointUri := ParseURI(Backend.Endpoint);
+  CanonicalUri := BuildCanonicalUri(EndpointUri, Backend.Bucket, '');
+  CanonicalQueryString := BuildCanonicalQueryString(Prefix, ContinuationToken);
+  RequestUrl := BuildRequestUrlWithQuery(EndpointUri, CanonicalUri, CanonicalQueryString);
+  HostHeader := BuildHostHeader(EndpointUri);
+  AmzDate := AmzTimestamp(ShortDate);
+  CredentialScope := ShortDate + '/' + Backend.Region + '/s3/aws4_request';
+  SignedHeaders := 'host;x-amz-content-sha256;x-amz-date';
+  CanonicalHeaders := 'host:' + HostHeader + SigLineBreak +
+                      'x-amz-content-sha256:' + EmptyPayloadHash + SigLineBreak +
+                      'x-amz-date:' + AmzDate + SigLineBreak;
+  CanonicalRequest := 'GET' + SigLineBreak +
+                      CanonicalUri + SigLineBreak +
+                      CanonicalQueryString + SigLineBreak +
+                      CanonicalHeaders + SigLineBreak +
+                      SignedHeaders + SigLineBreak +
+                      EmptyPayloadHash;
+  StringToSign := 'AWS4-HMAC-SHA256' + SigLineBreak +
+                  AmzDate + SigLineBreak +
+                  CredentialScope + SigLineBreak +
+                  Sha256Hex(UTF8String(CanonicalRequest));
+  Signature := CreateSignature(Backend.SecretAccessKey, ShortDate, Backend.Region, StringToSign);
+
+  Client := TFPHTTPClient.Create(nil);
+  Response := TRawByteStringStream.Create('');
+  try
+    Client.AllowRedirect := False;
+    Client.AddHeader('Accept-Encoding', 'identity');
+    Client.AddHeader('x-amz-content-sha256', EmptyPayloadHash);
+    Client.AddHeader('x-amz-date', AmzDate);
+    Client.AddHeader(
+      'Authorization',
+      'AWS4-HMAC-SHA256 Credential=' + Backend.AccessKeyId + '/' + CredentialScope +
+      ', SignedHeaders=' + SignedHeaders + ', Signature=' + Signature);
+    try
+      Client.HTTPMethod('GET', RequestUrl, Response, [200, 400, 403, 404]);
+      StatusCode := Client.ResponseStatusCode;
+      if StatusCode = 200 then
+      begin
+        ParseListObjectsXml(Response.DataString, Objects, IsTruncated, NextContinuationToken);
+        Result := True;
+      end
+      else
+      begin
+        ErrorContent := Response.DataString;
+        Result := False;
+      end;
+    except
+      on E: EHTTPClient do
+      begin
+        StatusCode := Client.ResponseStatusCode;
+        ErrorContent := E.Message;
+        Result := False;
+      end;
+    end;
+  finally
+    Response.Free;
+    Client.Free;
+  end;
+end;
+
+class function TPascalS3Client.TryListObjects(
+  const Backend: TS3Backend;
+  const Prefix: string;
+  out Objects: TS3ObjectInfoArray;
+  out ErrorContent: string;
+  out StatusCode: Integer): Boolean;
+var
+  PageObjects: TS3ObjectInfoArray;
+  IsTruncated: Boolean;
+  ContinuationToken: string;
+  NextContinuationToken: string;
+  I: Integer;
+  Count: Integer;
+begin
+  Result := False;
+  SetLength(Objects, 0);
+  ErrorContent := '';
+  StatusCode := 0;
+  ContinuationToken := '';
+  Count := 0;
+
+  repeat
+    if not TryListObjectsPage(
+      Backend,
+      Prefix,
+      ContinuationToken,
+      PageObjects,
+      IsTruncated,
+      NextContinuationToken,
+      ErrorContent,
+      StatusCode) then
+      Exit(False);
+
+    SetLength(Objects, Count + Length(PageObjects));
+    for I := 0 to Length(PageObjects) - 1 do
+    begin
+      Objects[Count] := PageObjects[I];
+      Inc(Count);
+    end;
+
+    ContinuationToken := NextContinuationToken;
+  until (not IsTruncated) or (ContinuationToken = '');
+
+  Result := True;
 end;
 
 class function TPascalS3Client.TryDownloadUtf8String(

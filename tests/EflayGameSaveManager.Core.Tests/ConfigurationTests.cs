@@ -16,6 +16,7 @@ public sealed class ConfigurationTests
         Assert.NotNull(config);
         Assert.NotEmpty(config.Games);
         Assert.NotEmpty(config.Devices);
+        Assert.NotEqual(System.Text.Json.JsonValueKind.Undefined, config.QuickAction.QuickActionGame.ValueKind);
     }
 
     [Theory]
@@ -47,5 +48,32 @@ public sealed class ConfigurationTests
         var snapshot = service.CreateSnapshot(config, @"G:\Projects\my-lab\Tools\EflayGameSaveManager\EflayGameSaveManager\GameSaveManager.config.json");
 
         Assert.EndsWith(Path.Combine("EflayGameSaveManager", "save_data"), snapshot.BackupRoot);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WritesDefaultConfigurationWhenFileDoesNotExist()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager.Tests", Guid.NewGuid().ToString("N"));
+        var configPath = Path.Combine(root, GameSaveManagerConfigurationService.ConfigFileName);
+        var service = new GameSaveManagerConfigurationService();
+        var config = service.CreateDefault();
+
+        try
+        {
+            await service.SaveAsync(configPath, config);
+            var loaded = await service.LoadAsync(configPath);
+
+            Assert.True(File.Exists(configPath));
+            Assert.Equal("1.0.0", loaded.Version);
+            Assert.Empty(loaded.Games);
+            Assert.Equal("./save_data", loaded.BackupPath);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 }

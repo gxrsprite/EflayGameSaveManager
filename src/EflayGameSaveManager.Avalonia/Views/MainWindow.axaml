@@ -12,6 +12,14 @@
         Background="#F5F7FA"
         Title="Eflay Game Save Manager">
 
+    <Window.Styles>
+        <Style Selector="Path.icon-stroke">
+            <Setter Property="Stroke" Value="#1B2A3A"/>
+            <Setter Property="StrokeThickness" Value="1.8"/>
+            <Setter Property="StrokeLineCap" Value="Round"/>
+        </Style>
+    </Window.Styles>
+
     <Grid RowDefinitions="Auto,*" Margin="20">
         <Border Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="18" Padding="18">
             <StackPanel Spacing="12">
@@ -61,27 +69,51 @@
         <Grid Grid.Row="1" ColumnDefinitions="320,*" ColumnSpacing="18" Margin="0,18,0,0">
             <Border Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="18" Padding="14">
                 <Grid RowDefinitions="Auto,*">
-                    <TextBlock Text="{Binding Games.Count, StringFormat=Games: {0}}" FontSize="16" FontWeight="SemiBold"/>
-                    <ListBox Grid.Row="1"
-                             Margin="0,12,0,0"
-                             ItemsSource="{Binding Games}"
-                             SelectedItem="{Binding SelectedGame}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:GameListItemViewModel">
-                                <Border Padding="12" Margin="0,0,0,8" Background="#F8FAFC" CornerRadius="12" BorderBrush="#E2E8F0" BorderThickness="1">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
-                                        <TextBlock Text="{Binding CloudBadge}" Foreground="#5F7288"/>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Content="Games"
+                                Command="{Binding ShowGameListCommand}" />
+                        <Button Grid.Column="1"
+                                Content="Add Game"
+                                Command="{Binding ShowAddGameCommand}" />
+                    </Grid>
+
+                    <Grid Grid.Row="1" Margin="0,12,0,0">
+                        <StackPanel IsVisible="{Binding IsGameListView}" Spacing="10">
+                            <TextBlock Text="{Binding Games.Count, StringFormat=Games: {0}}" FontSize="16" FontWeight="SemiBold"/>
+                            <ListBox ItemsSource="{Binding Games}"
+                                     SelectedItem="{Binding SelectedGame}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:GameListItemViewModel">
+                                        <Border Padding="12" Margin="0,0,0,8" Background="#F8FAFC" CornerRadius="12" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                                <TextBlock Text="{Binding CloudBadge}" Foreground="#5F7288"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding IsAddGameView}" Spacing="10">
+                            <TextBlock Text="Add Game" FontSize="16" FontWeight="SemiBold"/>
+                            <TextBlock Text="Name, executable, and save units are edited on the right." TextWrapping="Wrap" Foreground="#5F7288"/>
+                            <Button Content="Add Folder Save"
+                                    Command="{Binding AddFolderSaveUnitCommand}" />
+                            <Button Content="Add File Save"
+                                    Command="{Binding AddFileSaveUnitCommand}" />
+                            <Button Content="Add Registry Save"
+                                    Command="{Binding AddRegistrySaveUnitCommand}" />
+                            <Button Content="Reset Form"
+                                    Command="{Binding ResetAddGameCommand}" />
+                        </StackPanel>
+                    </Grid>
                 </Grid>
             </Border>
 
             <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="18" Padding="18">
-                <ScrollViewer>
+                <Grid>
+                <ScrollViewer IsVisible="{Binding IsGameListView}">
                     <StackPanel Spacing="16">
                         <StackPanel Spacing="6">
                             <TextBlock Text="{Binding SelectedGameName}" FontSize="24" FontWeight="Bold" Foreground="#1B2A3A"/>
@@ -93,14 +125,32 @@
                             <Button Command="{Binding UploadSelectedGameCurrentSaveCommand}"
                                     IsEnabled="{Binding SelectedGameCanSync}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="☁↑" FontSize="14" FontWeight="Bold"/>
+                                    <Viewbox Width="18" Height="18" VerticalAlignment="Center">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Classes="icon-stroke"
+                                                  Data="M6.5,18 C4.0,18 2.0,16.1 2.0,13.8 C2.0,11.6 3.7,9.8 5.8,9.6 C6.5,6.9 9.0,5 11.9,5 C15.1,5 17.8,7.4 18.2,10.5 C20.3,10.9 22.0,12.6 22.0,14.8 C22.0,17.0 20.1,18.0 18.1,18.0"
+                                                  Fill="Transparent"/>
+                                            <Path Classes="icon-stroke"
+                                                  Data="M12,18 L12,10 M8.7,13.3 L12,10 L15.3,13.3"
+                                                  Fill="Transparent"/>
+                                        </Canvas>
+                                    </Viewbox>
                                     <TextBlock Text="Sync Current Save To Cloud"/>
                                 </StackPanel>
                             </Button>
                             <Button Command="{Binding RestoreSelectedGameCurrentSaveCommand}"
                                     IsEnabled="{Binding SelectedGameCanSync}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="☁↓" FontSize="14" FontWeight="Bold"/>
+                                    <Viewbox Width="18" Height="18" VerticalAlignment="Center">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Classes="icon-stroke"
+                                                  Data="M6.5,18 C4.0,18 2.0,16.1 2.0,13.8 C2.0,11.6 3.7,9.8 5.8,9.6 C6.5,6.9 9.0,5 11.9,5 C15.1,5 17.8,7.4 18.2,10.5 C20.3,10.9 22.0,12.6 22.0,14.8 C22.0,17.0 20.1,18.0 18.1,18.0"
+                                                  Fill="Transparent"/>
+                                            <Path Classes="icon-stroke"
+                                                  Data="M12,10 L12,18 M8.7,14.7 L12,18 L15.3,14.7"
+                                                  Fill="Transparent"/>
+                                        </Canvas>
+                                    </Viewbox>
                                     <TextBlock Text="Restore From Cloud"/>
                                 </StackPanel>
                             </Button>
@@ -134,32 +184,40 @@
                         <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Current Device Game Executable" FontWeight="SemiBold" Foreground="#1B2A3A"/>
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                     <TextBox Text="{Binding CurrentDeviceGamePath}" Watermark="Enter current device game executable path"/>
                                     <Button Grid.Column="1"
                                             Content="Open Folder"
                                             Command="{Binding OpenCurrentGameFolderCommand}" />
+                                    <Button Grid.Column="2"
+                                            Content="Select Path"
+                                            Command="{Binding ChooseCurrentGamePathCommand}" />
                                 </Grid>
                             </StackPanel>
                         </Border>
 
                         <Border Background="#F5FBFF" BorderBrush="#B9D7EA" BorderThickness="1" CornerRadius="12" Padding="12">
                             <StackPanel Spacing="10">
-                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                                     <TextBlock Text="{Binding CloudBackups.Count, StringFormat=Cloud Backups: {0}}"
                                                FontWeight="SemiBold"
                                                Foreground="#1B2A3A"/>
                                     <Button Grid.Column="1"
                                             Margin="0,0,8,0"
+                                            Content="Rebuild Index"
+                                            Command="{Binding RebuildSelectedGameCloudBackupsManifestCommand}"
+                                            IsEnabled="{Binding SelectedGameCanSync}" />
+                                    <Button Grid.Column="2"
+                                            Margin="0,0,8,0"
                                             Content="Download Zip"
                                             Command="{Binding DownloadSelectedCloudBackupZipCommand}"
                                             IsEnabled="{Binding HasSelectedCloudBackup}" />
-                                    <Button Grid.Column="2"
+                                    <Button Grid.Column="3"
                                             Margin="0,0,8,0"
                                             Content="Restore Selected"
                                             Command="{Binding RestoreSelectedCloudBackupCommand}"
                                             IsEnabled="{Binding HasSelectedCloudBackup}" />
-                                    <Button Grid.Column="3"
+                                    <Button Grid.Column="4"
                                             Content="Delete Selected"
                                             Command="{Binding DeleteSelectedCloudBackupCommand}"
                                             IsEnabled="{Binding HasSelectedCloudBackup}" />
@@ -195,11 +253,14 @@
                                             <StackPanel Spacing="4" Margin="0,0,0,8">
                                                 <TextBlock Text="{Binding SaveUnitId, StringFormat=Save unit {0}}" Foreground="#394B5A"/>
                                                 <TextBlock Text="{Binding UnitType}" Foreground="#394B5A"/>
-                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                                     <TextBox Text="{Binding Path}" Watermark="Enter current device save path"/>
                                                     <Button Grid.Column="1"
                                                             Content="Open Folder"
                                                             Command="{Binding OpenPathCommand}" />
+                                                    <Button Grid.Column="2"
+                                                            Content="Select Path"
+                                                            Command="{Binding ChoosePathCommand}" />
                                                 </Grid>
                                             </StackPanel>
                                         </DataTemplate>
@@ -209,6 +270,94 @@
                         </Border>
                     </StackPanel>
                 </ScrollViewer>
+                <ScrollViewer IsVisible="{Binding IsAddGameView}">
+                    <StackPanel Spacing="16">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Add Game" FontSize="24" FontWeight="Bold" Foreground="#1B2A3A"/>
+                            <TextBlock Text="Create a game entry for the current device. Paths can use tokens or absolute paths." Foreground="#5F7288"/>
+                        </StackPanel>
+
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Game" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                <TextBox Text="{Binding AddGameName}" Watermark="Game name"/>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <TextBox Text="{Binding AddGamePath}" Watermark="Optional game executable path"/>
+                                    <Button Grid.Column="1"
+                                            Content="Select Path"
+                                            Command="{Binding ChooseAddGamePathCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#FFFDF5" BorderBrush="#E8D9A8" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <TextBlock Text="{Binding AddGameSaveUnits.Count, StringFormat=Save Units: {0}}"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1B2A3A"/>
+                                    <Button Grid.Column="1"
+                                            Margin="0,0,8,0"
+                                            Content="Folder"
+                                            Command="{Binding AddFolderSaveUnitCommand}" />
+                                    <Button Grid.Column="2"
+                                            Margin="0,0,8,0"
+                                            Content="File"
+                                            Command="{Binding AddFileSaveUnitCommand}" />
+                                    <Button Grid.Column="3"
+                                            Content="Registry"
+                                            Command="{Binding AddRegistrySaveUnitCommand}" />
+                                </Grid>
+
+                                <ItemsControl ItemsSource="{Binding AddGameSaveUnits}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AddGameSaveUnitEditorViewModel">
+                                            <StackPanel Spacing="6" Margin="0,0,0,12">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="{Binding SaveUnitId, StringFormat=Unit {0}}" FontWeight="SemiBold" Foreground="#394B5A"/>
+                                                        <TextBlock Text="{Binding UnitTypeText}" Foreground="#5F7288"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1"
+                                                            Content="Remove"
+                                                            Command="{Binding RemoveCommand}" />
+                                                </Grid>
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <TextBox Text="{Binding Path}" Watermark="{Binding PathWatermark}"/>
+                                                    <Button Grid.Column="1"
+                                                            Content="Select Path"
+                                                            Command="{Binding ChoosePathCommand}"
+                                                            IsEnabled="{Binding CanChoosePath}" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F5FBFF" BorderBrush="#B9D7EA" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Path Tokens" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                <TextBlock Text="{Binding AddGameTokenHelp}" TextWrapping="Wrap" Foreground="#394B5A"/>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="Create Game"
+                                    MinWidth="140"
+                                    Command="{Binding CreateGameCommand}"
+                                    IsEnabled="{Binding CanCreateGame}" />
+                            <Button Content="Reset"
+                                    MinWidth="100"
+                                    Command="{Binding ResetAddGameCommand}" />
+                            <Button Content="Back To Games"
+                                    MinWidth="130"
+                                    Command="{Binding ShowGameListCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+                </Grid>
             </Border>
         </Grid>
     </Grid>

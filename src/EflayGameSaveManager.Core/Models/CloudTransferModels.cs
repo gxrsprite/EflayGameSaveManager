@@ -14,6 +14,12 @@ public sealed record CloudDownloadResult(
     long DownloadedByteCount,
     DateTimeOffset CompletedAtUtc);
 
+public sealed record CloudManifestRebuildResult(
+    string RootKey,
+    int BackupCount,
+    int PreservedDeviceCount,
+    DateTimeOffset CompletedAtUtc);
+
 public sealed record CloudObjectInfo(
     string Key,
     long Size,
@@ -35,7 +41,8 @@ public sealed record CloudGameBackup(
     long Size,
     string? Parent,
     string DeviceId,
-    bool IsCurrentDeviceHead);
+    bool IsCurrentDeviceHead,
+    bool IsDeviceHead);
 
 public sealed record GameCloudManifest(
     string GameName,
