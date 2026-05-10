@@ -78,10 +78,14 @@
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="0,12,0,0">
-                        <StackPanel IsVisible="{Binding IsGameListView}" Spacing="10">
+                        <Grid IsVisible="{Binding IsGameListView}" RowDefinitions="Auto,*" RowSpacing="10">
                             <TextBlock Text="{Binding Games.Count, StringFormat=Games: {0}}" FontSize="16" FontWeight="SemiBold"/>
-                            <ListBox ItemsSource="{Binding Games}"
-                                     SelectedItem="{Binding SelectedGame}">
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding Games}"
+                                     SelectedItem="{Binding SelectedGame}"
+                                     ScrollViewer.VerticalScrollBarVisibility="Visible"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     ScrollViewer.AllowAutoHide="False">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:GameListItemViewModel">
                                         <Border Padding="12" Margin="0,0,0,8" Background="#F8FAFC" CornerRadius="12" BorderBrush="#E2E8F0" BorderThickness="1">
@@ -93,7 +97,7 @@
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                        </StackPanel>
+                        </Grid>
 
                         <StackPanel IsVisible="{Binding IsAddGameView}" Spacing="10">
                             <TextBlock Text="Add Game" FontSize="16" FontWeight="SemiBold"/>
@@ -113,7 +117,10 @@
 
             <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="18" Padding="18">
                 <Grid>
-                <ScrollViewer IsVisible="{Binding IsGameListView}">
+                <ScrollViewer IsVisible="{Binding IsGameListView}"
+                              VerticalScrollBarVisibility="Visible"
+                              HorizontalScrollBarVisibility="Disabled"
+                              AllowAutoHide="False">
                     <StackPanel Spacing="16">
                         <StackPanel Spacing="6">
                             <TextBlock Text="{Binding SelectedGameName}" FontSize="24" FontWeight="Bold" Foreground="#1B2A3A"/>
@@ -225,7 +232,10 @@
 
                                 <ListBox MaxHeight="220"
                                          ItemsSource="{Binding CloudBackups}"
-                                         SelectedItem="{Binding SelectedCloudBackup}">
+                                         SelectedItem="{Binding SelectedCloudBackup}"
+                                         ScrollViewer.VerticalScrollBarVisibility="Visible"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.AllowAutoHide="False">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:CloudBackupItemViewModel">
                                             <Border Padding="10" Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="10">
@@ -270,7 +280,10 @@
                         </Border>
                     </StackPanel>
                 </ScrollViewer>
-                <ScrollViewer IsVisible="{Binding IsAddGameView}">
+                <ScrollViewer IsVisible="{Binding IsAddGameView}"
+                              VerticalScrollBarVisibility="Visible"
+                              HorizontalScrollBarVisibility="Disabled"
+                              AllowAutoHide="False">
                     <StackPanel Spacing="16">
                         <StackPanel Spacing="6">
                             <TextBlock Text="Add Game" FontSize="24" FontWeight="Bold" Foreground="#1B2A3A"/>
