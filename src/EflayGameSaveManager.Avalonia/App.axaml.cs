@@ -31,13 +31,16 @@ public partial class App : Application
                 new EnvironmentTokenResolver(),
                 currentDeviceService,
                 new AppRuntimeSettingsService());
+            var archiveTransferService = new ArchiveTransferService();
+            var saveBackupService = new SaveBackupService();
+            var localSaveService = new LocalSaveService();
             var cloudSyncService = new CloudSyncService(
                 new S3CompatibleCloudStorageClient(),
-                new SaveBackupService(),
-                new ArchiveTransferService());
+                saveBackupService,
+                archiveTransferService);
             var mainWindow = new MainWindow();
             var pathPickerService = new AvaloniaPathPickerService(mainWindow);
-            var viewModel = new MainWindowViewModel(configurationService, gameLibraryService, cloudSyncService, pathPickerService);
+            var viewModel = new MainWindowViewModel(configurationService, gameLibraryService, cloudSyncService, localSaveService, pathPickerService);
 
             mainWindow.DataContext = viewModel;
             desktop.MainWindow = mainWindow;

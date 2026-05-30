@@ -28,6 +28,8 @@ Main and recommended desktop UI built with Avalonia.
 - Adds new games from the UI.
 - Supports folder saves, file saves, and Windows registry saves (`WinRegistry`).
 - Lets users select file/folder paths or edit paths manually, including token paths such as `<home>` and `<winLocalAppData>`.
+- Creates local backups (zip archives with `Backups.json` manifests).
+- Lists local backups with device name, size, and date; restores or deletes selected local backups.
 - Uploads current saves to S3-compatible cloud storage.
 - Restores current cloud saves and selected cloud backup zip entries.
 - Downloads, deletes, and rebuilds cloud backup indexes.
@@ -115,6 +117,74 @@ Current notes:
 - Attempts a paged game list and basic cloud sync/restore actions.
 - Not the current Winlator delivery target.
 
+### `EflayGameSaveManager.Maui`
+
+.NET MAUI Android 客户端，共享 `EflayGameSaveManager.Core` 业务逻辑。
+
+当前功能：
+- 复用 Core 的配置管理、路径解析和 S3 云端同步
+- 游戏列表 + 收藏栏，查看云状态，上传/恢复当前存档
+- SAF 文件/文件夹选择器，支持 `content://` → 真实路径解析
+- 首次启动从 assets 种子 `GameSaveManager.config.json` + `GameSaveManager.runtime.json`
+- 启动时配置标准化（合并重复存档单元、旧 config 清理）
+- `MANAGE_EXTERNAL_STORAGE` 权限请求（API 30+），cleartext HTTP
+- **Shizuku 支持**：通过 JNI 桥接 Shizuku API，为 `/Android/data/` 等受限路径提供特权文件访问。上传时自动将受限文件暂存到 temp，恢复后写回。全部逻辑在 `#if ANDROID` ViewModel 层，Core 保持桌面纯净
+
+构建 & 部署：
+```powershell
+dotnet build src\EflayGameSaveManager.Maui\EflayGameSaveManager.Maui.csproj -c Debug -f net10.0-android
+adb install -r bin\Debug\net10.0-android\com.eflay.gamesavemanager.maui-Signed.apk
+```
+
+踩坑记录和待办：
+- [`docs/ANDROID_MAUI_TODO.md`](docs/ANDROID_MAUI_TODO.md)
+
+### `EflayGameSaveManager.Kotlin`
+
+原生 Kotlin / Jetpack Compose Android 客户端，独立实现不依赖 Core。
+
+当前功能：
+- 完整复刻 MAUI 版的游戏存档管理流程
+- `kotlinx.serialization` 数据模型，`@SerialName` 匹配 C# snake_case JSON
+- S3 兼容云存储 + AWS4-HMAC-SHA256 签名（OkHttp）
+- zip 归档/恢复，兼容 C# `ArchiveTransferService` 格式
+- 收藏（SharedPreferences）、启动配置标准化、设备 ID 解析
+- SAF 选择器 → `StoragePathResolver` 解析为真实路径
+- `MANAGE_EXTERNAL_STORAGE` + cleartext HTTP
+- **Shizuku 支持**：零外部依赖的反射桥接，`ArchiveService` 内建受限路径自动接管。Header 栏彩色指示器显示 Shizuku 状态（未安装 / 无权限 / ADB / root）
+
+构建 & 部署：
+```bash
+export ANDROID_HOME="$HOME/AppData/Local/Android/Sdk"
+export JAVA_HOME="F:/Program Files/Android/Android Studio/jbr"
+cd src/EflayGameSaveManager.Kotlin
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+APK ~17MB，增量编译 ~30s。用 Android Studio 打开 `src/EflayGameSaveManager.Kotlin` 目录即可 IDE 开发。
+
+踩坑记录和待办：
+- [`docs/ANDROID_KOTLIN_TODO.md`](docs/ANDROID_KOTLIN_TODO.md)
+
+### `EflayGameSaveManager.MewUI`
+
+Lightweight desktop UI built with MewUI.
+
+Current scope:
+
+- Reuses `EflayGameSaveManager.Core` for configuration loading, save snapshot resolution, and S3-compatible cloud sync.
+- Lists configured games and shows current-device save paths, executable path, and basic cloud status.
+- Supports opening save/game folders, running the configured game executable, uploading current save to cloud, and restoring the current cloud save.
+- Supports a basic "quick add game" flow for adding a folder-save game with one current-device save path and an optional executable path.
+- Can start without an existing `GameSaveManager.config.json`; adding the first game writes a new config file.
+
+Build:
+
+```powershell
+dotnet build src\EflayGameSaveManager.MewUI\EflayGameSaveManager.MewUI.csproj
+```
+
 ### `EflayGameSaveManager.Core.Tests`
 
 Unit tests for Core behavior.
@@ -191,6 +261,8 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 - 在界面中添加新游戏
 - 支持文件夹存档、单文件存档、Windows 注册表存档（`WinRegistry`）
 - 路径可通过选择器选择，也可以手动编辑并使用 `<home>`、`<winLocalAppData>` 等 token
+- 创建本地备份（zip 压缩包 + Backups.json 清单）
+- 查看本地备份列表（显示设备名、大小、日期），恢复或删除选中的本地备份
 - 上传当前存档到 S3 兼容云存储
 - 从当前云存档或指定云备份恢复
 - 下载、删除云备份，重建云备份索引
@@ -199,6 +271,60 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 构建：
 ```powershell
 dotnet build src\EflayGameSaveManager.Avalonia\EflayGameSaveManager.Avalonia.csproj -c Release
+```
+
+### `EflayGameSaveManager.Maui`
+
+.NET MAUI Android 客户端，共享 Core 业务逻辑。
+
+当前功能：
+- 游戏列表 + 收藏栏，云状态刷新，上传/恢复当前存档
+- SAF 文件/文件夹选择器，`content://` → 真实路径解析
+- 首次启动种子配置，启动时标准化（合并重复单元）
+- `MANAGE_EXTERNAL_STORAGE` + cleartext HTTP
+- **Shizuku 支持**：JNI 桥接 Shizuku API，受限路径自动暂存/恢复，全部在 `#if ANDROID` ViewModel 层处理
+
+构建：
+```powershell
+dotnet build src\EflayGameSaveManager.Maui\EflayGameSaveManager.Maui.csproj -c Debug -f net10.0-android
+```
+
+### `EflayGameSaveManager.Kotlin`
+
+原生 Kotlin / Jetpack Compose Android 客户端，独立实现。
+
+当前功能：
+- 完整复刻存档管理流程：S3 云同步、zip 归档、收藏、配置标准化
+- `kotlinx.serialization` + `@SerialName` 匹配 C# snake_case JSON
+- S3 AWS4-HMAC-SHA256 签名（OkHttp），zip 格式兼容 C# `ArchiveTransferService`
+- SAF → 真实路径解析，`MANAGE_EXTERNAL_STORAGE`
+- **Shizuku 支持**：反射桥接 `newProcess`，`ArchiveService` 内建受限路径接管。Header 状态指示器
+
+构建：
+```bash
+cd src/EflayGameSaveManager.Kotlin && ./gradlew assembleDebug
+```
+
+APK ~17MB，Android Studio 直接打开 `src/EflayGameSaveManager.Kotlin` 即可开发。
+
+踩坑文档：
+- [`docs/ANDROID_MAUI_TODO.md`](docs/ANDROID_MAUI_TODO.md)
+- [`docs/ANDROID_KOTLIN_TODO.md`](docs/ANDROID_KOTLIN_TODO.md)
+
+### `EflayGameSaveManager.MewUI`
+
+基于 MewUI 的轻量 .NET 桌面版。
+
+当前功能：
+- 复用 `EflayGameSaveManager.Core` 的配置读取、路径解析和 S3 兼容云同步
+- 查看游戏列表、当前设备存档路径、当前设备游戏路径和基础云状态
+- 支持打开存档目录、打开游戏目录、运行游戏、上传当前存档到云端、恢复当前云端存档
+- 支持一个基础的”快速添加游戏”流程，可新增一个带单个当前设备文件夹存档路径的游戏，游戏路径可选
+- 无需预先存在 `GameSaveManager.config.json`；首次添加游戏后会自动写出配置文件
+
+构建：
+```powershell
+dotnet build src\EflayGameSaveManager.MewUI\EflayGameSaveManager.MewUI.csproj
 ```
 
 ### `EflayGameSaveManager.Lazarus`

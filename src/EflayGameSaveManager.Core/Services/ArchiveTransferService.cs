@@ -18,29 +18,27 @@ public sealed class ArchiveTransferService
         Directory.CreateDirectory(workingDirectory);
         var stagingDirectory = Path.Combine(workingDirectory, "content");
         Directory.CreateDirectory(stagingDirectory);
+        var includedUnits = game.SaveUnits
+            .Select(saveUnit => new
+            {
+                SaveUnit = saveUnit,
+                CurrentPath = saveUnit.Paths.FirstOrDefault(path => string.Equals(path.DeviceId, currentDevice.DeviceId, StringComparison.Ordinal))
+            })
+            .Where(item =>
+                item.CurrentPath is not null &&
+                !string.IsNullOrWhiteSpace(item.CurrentPath.Path) &&
+                CanIncludePath(item.SaveUnit.UnitType, item.CurrentPath.Path))
+            .ToArray();
 
-        foreach (var saveUnit in game.SaveUnits)
+        var useFlatSingleUnitLayout = includedUnits.Length == 1;
+
+        foreach (var item in includedUnits)
         {
-            var currentPath = saveUnit.Paths.FirstOrDefault(path => string.Equals(path.DeviceId, currentDevice.DeviceId, StringComparison.Ordinal));
-            if (currentPath is null || string.IsNullOrWhiteSpace(currentPath.Path))
-            {
-                continue;
-            }
-
-            if (saveUnit.UnitType == SaveUnitType.WinRegistry)
-            {
-                if (!_registryTransferService.KeyExists(currentPath.Path))
-                {
-                    continue;
-                }
-            }
-            else if (!File.Exists(currentPath.Path) && !Directory.Exists(currentPath.Path))
-            {
-                continue;
-            }
-
-            var unitRelativePath = saveUnit.Id.ToString();
-            var stagedPath = Path.Combine(stagingDirectory, unitRelativePath);
+            var saveUnit = item.SaveUnit;
+            var currentPath = item.CurrentPath!;
+            var stagedPath = useFlatSingleUnitLayout
+                ? stagingDirectory
+                : Path.Combine(stagingDirectory, saveUnit.Id.ToString());
 
             if (saveUnit.UnitType == SaveUnitType.WinRegistry)
             {
@@ -77,20 +75,27 @@ public sealed class ArchiveTransferService
         try
         {
             ExtractArchive(archivePath, extractRoot);
+            AppLogger.Info($"Restore extracted archive to {extractRoot}");
 
             foreach (var localUnit in game.SaveUnits)
             {
                 var localPath = localUnit.Paths.FirstOrDefault(path => string.Equals(path.DeviceId, currentDevice.DeviceId, StringComparison.Ordinal));
                 if (localPath is null || string.IsNullOrWhiteSpace(localPath.Path))
                 {
+                    AppLogger.Info($"Restore skip unit {localUnit.Id}: no path for device {currentDevice.DeviceId}");
                     continue;
                 }
+
+                AppLogger.Info($"Restore unit {localUnit.Id} [{localUnit.UnitType}] -> {localPath.Path}");
 
                 var sourceRoot = ResolveSourceRoot(extractRoot, localUnit.Id, game.SaveUnits.Count);
                 if (sourceRoot is null)
                 {
+                    AppLogger.Info($"Restore skip unit {localUnit.Id}: source root not found in archive");
                     continue;
                 }
+
+                AppLogger.Info($"Restore unit {localUnit.Id} sourceRoot={sourceRoot}");
 
                 if (localUnit.DeleteBeforeApply)
                 {
@@ -121,17 +126,28 @@ public sealed class ArchiveTransferService
                     var sourceFile = Directory.EnumerateFiles(sourceRoot).FirstOrDefault();
                     if (sourceFile is null)
                     {
+                        AppLogger.Info($"Restore skip unit {localUnit.Id}: no source file in archive");
                         continue;
                     }
 
                     Directory.CreateDirectory(Path.GetDirectoryName(localPath.Path)!);
                     File.Copy(sourceFile, localPath.Path, overwrite: true);
+                    AppLogger.Info($"Restore unit {localUnit.Id}: copied {sourceFile} -> {localPath.Path}");
                 }
                 else
                 {
-                    CopyDirectory(ResolveFolderContentRoot(sourceRoot, localPath.Path), localPath.Path);
+                    var actualSource = ResolveFolderContentRoot(sourceRoot, localPath.Path);
+                    CopyDirectory(actualSource, localPath.Path);
+                    AppLogger.Info($"Restore unit {localUnit.Id}: copied folder {actualSource} -> {localPath.Path}");
                 }
             }
+
+            AppLogger.Info("Restore completed successfully");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Restore failed", ex);
+            throw;
         }
         finally
         {
@@ -152,6 +168,12 @@ public sealed class ArchiveTransferService
 
         if (totalUnitCount == 1)
         {
+            var singleUnitChildDirectories = Directory.GetDirectories(extractRoot);
+            if (singleUnitChildDirectories.Length == 1 && IsNumericDirectoryName(singleUnitChildDirectories[0]))
+            {
+                return singleUnitChildDirectories[0];
+            }
+
             return extractRoot;
         }
 
@@ -168,6 +190,21 @@ public sealed class ArchiveTransferService
         }
 
         return null;
+    }
+
+    private bool CanIncludePath(SaveUnitType unitType, string path)
+    {
+        if (unitType == SaveUnitType.WinRegistry)
+        {
+            return _registryTransferService.KeyExists(path);
+        }
+
+        return File.Exists(path) || Directory.Exists(path);
+    }
+
+    private static bool IsNumericDirectoryName(string path)
+    {
+        return int.TryParse(Path.GetFileName(path), out _);
     }
 
     private static string ResolveFolderContentRoot(string sourceRoot, string targetPath)
@@ -195,7 +232,7 @@ public sealed class ArchiveTransferService
             ExtractFullPath = true,
             Overwrite = true,
             PreserveAttributes = false,
-            PreserveFileTime = true
+            PreserveFileTime = false
         };
 
         foreach (var entry in archive.Entries.Where(entry => !entry.IsDirectory))

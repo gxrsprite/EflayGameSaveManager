@@ -18,6 +18,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly GameSaveManagerConfigurationService _configurationService;
     private readonly GameLibraryService _gameLibraryService;
     private readonly CloudSyncService _cloudSyncService;
+    private readonly LocalSaveService _localSaveService;
     private readonly IPathPickerService _pathPickerService;
 
     private ManagerConfig? _currentConfig;
@@ -97,6 +98,12 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _hasSelectedCloudBackup;
 
     [ObservableProperty]
+    private LocalBackupItemViewModel? _selectedLocalBackup;
+
+    [ObservableProperty]
+    private bool _hasSelectedLocalBackup;
+
+    [ObservableProperty]
     private string _addGameName = string.Empty;
 
     [ObservableProperty]
@@ -123,17 +130,20 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<GameListItemViewModel> Games { get; } = [];
     public ObservableCollection<CurrentSavePathEditorViewModel> CurrentDevicePaths { get; } = [];
     public ObservableCollection<CloudBackupItemViewModel> CloudBackups { get; } = [];
+    public ObservableCollection<LocalBackupItemViewModel> LocalBackups { get; } = [];
     public ObservableCollection<AddGameSaveUnitEditorViewModel> AddGameSaveUnits { get; } = [];
 
     public MainWindowViewModel(
         GameSaveManagerConfigurationService configurationService,
         GameLibraryService gameLibraryService,
         CloudSyncService cloudSyncService,
+        LocalSaveService localSaveService,
         IPathPickerService pathPickerService)
     {
         _configurationService = configurationService;
         _gameLibraryService = gameLibraryService;
         _cloudSyncService = cloudSyncService;
+        _localSaveService = localSaveService;
         _pathPickerService = pathPickerService;
     }
 
@@ -148,6 +158,11 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         HasSelectedCloudBackup = value is not null;
         _pendingCloudBackupOverwritePath = null;
+    }
+
+    partial void OnSelectedLocalBackupChanged(LocalBackupItemViewModel? value)
+    {
+        HasSelectedLocalBackup = value is not null;
     }
 
     partial void OnAddGameNameChanged(string value)
@@ -608,11 +623,111 @@ public partial class MainWindowViewModel : ViewModelBase
             });
     }
 
+    [RelayCommand]
+    private async Task BackupLocalAsync()
+    {
+        if (_currentSnapshot is null || SelectedGame is null)
+        {
+            StatusMessage = "Select a game first.";
+            return;
+        }
+
+        var game = _currentSnapshot.Games.First(item => string.Equals(item.Name, SelectedGame.Name, StringComparison.Ordinal));
+        await RunBusyAsync(
+            $"Creating local backup for {game.Name}...",
+            async () =>
+            {
+                await _localSaveService.CreateBackupAsync(game, _currentSnapshot.BackupRoot, _currentSnapshot.CurrentDevice);
+                StatusMessage = $"Local backup completed for {game.Name}.";
+                await RefreshLocalBackupsAsync();
+            });
+    }
+
+    [RelayCommand]
+    private async Task RefreshLocalBackupsAsync()
+    {
+        if (_currentSnapshot is null || SelectedGame is null)
+        {
+            LocalBackups.Clear();
+            SelectedLocalBackup = null;
+            return;
+        }
+
+        var game = _currentSnapshot.Games.First(item => string.Equals(item.Name, SelectedGame.Name, StringComparison.Ordinal));
+        var backups = await _localSaveService.ListBackupsAsync(game.Name, _currentSnapshot.BackupRoot, _currentSnapshot.CurrentDevice);
+
+        LocalBackups.Clear();
+        foreach (var backup in backups)
+        {
+            LocalBackups.Add(new LocalBackupItemViewModel(backup, ResolveDeviceName(backup.DeviceId)));
+        }
+
+        SelectedLocalBackup = LocalBackups.FirstOrDefault(item => item.IsCurrentDeviceHead)
+                              ?? LocalBackups.FirstOrDefault(item => item.IsDeviceHead)
+                              ?? LocalBackups.FirstOrDefault();
+    }
+
+    [RelayCommand]
+    private async Task RestoreLocalBackupAsync()
+    {
+        if (_currentSnapshot is null || SelectedGame is null)
+        {
+            StatusMessage = "Select a game first.";
+            return;
+        }
+
+        if (SelectedLocalBackup is null)
+        {
+            StatusMessage = "No local backup is selected.";
+            return;
+        }
+
+        var game = _currentSnapshot.Games.First(item => string.Equals(item.Name, SelectedGame.Name, StringComparison.Ordinal));
+        var backupDate = SelectedLocalBackup.Date;
+        await RunBusyAsync(
+            $"Restoring local backup {backupDate} for {game.Name}...",
+            async () =>
+            {
+                await _localSaveService.RestoreBackupAsync(game, _currentSnapshot.BackupRoot, _currentSnapshot.CurrentDevice, backupDate, SelectedLocalBackup.DeviceId);
+                StatusMessage = $"Restored local backup {backupDate} for {game.Name}.";
+                await RefreshLocalBackupsAsync();
+            });
+    }
+
+    [RelayCommand]
+    private async Task DeleteLocalBackupAsync()
+    {
+        if (_currentSnapshot is null || SelectedGame is null)
+        {
+            StatusMessage = "Select a game first.";
+            return;
+        }
+
+        if (SelectedLocalBackup is null)
+        {
+            StatusMessage = "No local backup is selected.";
+            return;
+        }
+
+        var game = _currentSnapshot.Games.First(item => string.Equals(item.Name, SelectedGame.Name, StringComparison.Ordinal));
+        var backupDate = SelectedLocalBackup.Date;
+        await RunBusyAsync(
+            $"Deleting local backup {backupDate} for {game.Name}...",
+            async () =>
+            {
+                await _localSaveService.DeleteBackupAsync(game.Name, _currentSnapshot.BackupRoot, backupDate, SelectedLocalBackup.DeviceId, _currentSnapshot.CurrentDevice);
+                StatusMessage = $"Deleted local backup {backupDate} for {game.Name}.";
+                await RefreshLocalBackupsAsync();
+            });
+    }
+
     private async Task HandleSelectedGameChangedAsync(GameListItemViewModel? selectedGame)
     {
         CurrentDevicePaths.Clear();
         CloudBackups.Clear();
         SelectedCloudBackup = null;
+        LocalBackups.Clear();
+        SelectedLocalBackup = null;
 
         if (_currentSnapshot is null || selectedGame is null)
         {
@@ -631,6 +746,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var game = _currentSnapshot.Games.First(item => string.Equals(item.Name, selectedGame.Name, StringComparison.Ordinal));
         ApplySelectedGameSnapshot(game);
         await RefreshSelectedGameCloudStatusAsync(forceReload: false);
+        await RefreshLocalBackupsAsync();
     }
 
     private void ApplySnapshot(ManagerConfig config, AppSnapshot snapshot, string? selectedGameName = null)
@@ -781,7 +897,7 @@ public partial class MainWindowViewModel : ViewModelBase
         CloudBackups.Clear();
         foreach (var backup in backups)
         {
-            CloudBackups.Add(new CloudBackupItemViewModel(backup));
+            CloudBackups.Add(new CloudBackupItemViewModel(backup, ResolveDeviceName(backup.DeviceId)));
         }
 
         SelectedCloudBackup = CloudBackups.FirstOrDefault(item => item.IsCurrentDeviceHead)
@@ -890,6 +1006,16 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             IsBusy = false;
         }
+    }
+
+    private string ResolveDeviceName(string deviceId)
+    {
+        if (_currentSnapshot?.Devices.TryGetValue(deviceId, out var device) == true && !string.IsNullOrWhiteSpace(device.Name))
+        {
+            return device.Name;
+        }
+
+        return deviceId;
     }
 
     private static bool IsCloudConfigured(CloudSettings cloudSettings)
@@ -1050,17 +1176,20 @@ public sealed partial class CurrentSavePathEditorViewModel : ObservableObject
 
 public sealed class CloudBackupItemViewModel
 {
-    public CloudBackupItemViewModel(CloudGameBackup backup)
+    public CloudBackupItemViewModel(CloudGameBackup backup, string deviceName)
     {
         Date = backup.Date;
         Describe = string.IsNullOrWhiteSpace(backup.Describe) ? "-" : backup.Describe;
         Path = backup.Path;
         DeviceId = backup.DeviceId;
+        DeviceName = deviceName;
         Parent = backup.Parent ?? "-";
         SizeText = FormatSize(backup.Size);
         IsCurrentDeviceHead = backup.IsCurrentDeviceHead;
         IsDeviceHead = backup.IsDeviceHead;
-        Summary = $"{Date} | {SizeText} | device: {DeviceId}";
+        Summary = string.IsNullOrWhiteSpace(deviceName)
+            ? $"{Date} | {SizeText} | device: {DeviceId}"
+            : $"{Date} | {SizeText} | {deviceName}";
         HeadBadge = backup.IsCurrentDeviceHead
             ? "Current Device Head"
             : backup.IsDeviceHead
@@ -1075,6 +1204,69 @@ public sealed class CloudBackupItemViewModel
     public string Path { get; }
 
     public string DeviceId { get; }
+
+    public string DeviceName { get; }
+
+    public string Parent { get; }
+
+    public string SizeText { get; }
+
+    public bool IsCurrentDeviceHead { get; }
+
+    public bool IsDeviceHead { get; }
+
+    public string Summary { get; }
+
+    public string HeadBadge { get; }
+
+    private static string FormatSize(long size)
+    {
+        if (size < 1024)
+        {
+            return $"{size} B";
+        }
+
+        if (size < 1024 * 1024)
+        {
+            return $"{size / 1024d:0.0} KB";
+        }
+
+        return $"{size / 1024d / 1024d:0.0} MB";
+    }
+}
+
+public sealed class LocalBackupItemViewModel
+{
+    public LocalBackupItemViewModel(LocalGameBackup backup, string deviceName)
+    {
+        Date = backup.Date;
+        Describe = string.IsNullOrWhiteSpace(backup.Describe) ? "-" : backup.Describe;
+        Path = backup.Path;
+        DeviceId = backup.DeviceId;
+        DeviceName = deviceName;
+        Parent = backup.Parent ?? "-";
+        SizeText = FormatSize(backup.Size);
+        IsCurrentDeviceHead = backup.IsCurrentDeviceHead;
+        IsDeviceHead = backup.IsDeviceHead;
+        Summary = string.IsNullOrWhiteSpace(deviceName)
+            ? $"{Date} | {SizeText} | device: {DeviceId}"
+            : $"{Date} | {SizeText} | {deviceName}";
+        HeadBadge = backup.IsCurrentDeviceHead
+            ? "Current Device Head"
+            : backup.IsDeviceHead
+                ? "Device Head"
+                : string.Empty;
+    }
+
+    public string Date { get; }
+
+    public string Describe { get; }
+
+    public string Path { get; }
+
+    public string DeviceId { get; }
+
+    public string DeviceName { get; }
 
     public string Parent { get; }
 

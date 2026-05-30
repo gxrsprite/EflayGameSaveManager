@@ -278,6 +278,52 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Border>
+
+                        <Border Background="#F5FFF5" BorderBrush="#B9D7B9" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <TextBlock Text="{Binding LocalBackups.Count, StringFormat=Local Backups: {0}}"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1B2A3A"/>
+                                    <Button Grid.Column="1"
+                                            Margin="0,0,8,0"
+                                            Content="Backup Local"
+                                            Command="{Binding BackupLocalCommand}"
+                                            IsEnabled="{Binding HasSelectedGame}" />
+                                    <Button Grid.Column="2"
+                                            Margin="0,0,8,0"
+                                            Content="Restore Selected"
+                                            Command="{Binding RestoreLocalBackupCommand}"
+                                            IsEnabled="{Binding HasSelectedLocalBackup}" />
+                                    <Button Grid.Column="3"
+                                            Content="Delete Selected"
+                                            Command="{Binding DeleteLocalBackupCommand}"
+                                            IsEnabled="{Binding HasSelectedLocalBackup}" />
+                                </Grid>
+
+                                <ListBox MaxHeight="180"
+                                         ItemsSource="{Binding LocalBackups}"
+                                         SelectedItem="{Binding SelectedLocalBackup}"
+                                         ScrollViewer.VerticalScrollBarVisibility="Visible"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.AllowAutoHide="False">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:LocalBackupItemViewModel">
+                                            <Border Padding="10" Margin="0,0,0,8" Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="10">
+                                                <StackPanel Spacing="4">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding HeadBadge}" Foreground="#18794E"/>
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding Path}" TextWrapping="Wrap" Foreground="#5F7288"/>
+                                                    <TextBlock Text="{Binding Describe, StringFormat=Describe: {0}}" Foreground="#5F7288"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
                 <ScrollViewer IsVisible="{Binding IsAddGameView}"
