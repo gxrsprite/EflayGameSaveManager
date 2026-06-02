@@ -25,8 +25,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val workspaceService = WorkspaceService(application)
     private val s3CloudService = S3CloudService()
     private val archiveService = ArchiveService()
-    private val favoriteService = FavoriteService(application)
-
     private var currentConfig: ManagerConfig? = null
     private var currentSnapshot: AppSnapshot? = null
     private var configPath: String = ""
@@ -55,7 +53,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val editSavePath: String = "",
         val editGamePath: String = "",
         val hasNoFavoriteGames: Boolean = true,
-        val shizukuStatus: String = "Shizuku: checking..."
+        val shizukuStatus: String = "Shizuku: checking...",
+        val showZipRestorePicker: Boolean = false,
+        val showZipUploadPicker: Boolean = false
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -82,7 +82,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun reloadCore() {
         configPath = workspaceService.ensureConfigPath(configService)
         currentConfig = configService.loadConfig(configPath)
-        favoriteGameNames = favoriteService.load()
+        favoriteGameNames = FavoriteService.loadLabels(currentConfig!!.favorites)
 
         val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
         currentSnapshot = configService.createSnapshot(currentConfig!!, configPath, deviceName)
@@ -159,13 +159,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // --- Favorites ---
 
     fun toggleFavorite(game: GameListItem) {
-        favoriteGameNames = favoriteService.toggle(game.name)
+        val config = currentConfig ?: return
+        val updated = FavoriteService.toggle(config.favorites, game.name)
+        currentConfig = config.copy(favorites = updated)
+        favoriteGameNames = FavoriteService.loadLabels(updated)
         viewModelScope.launch {
+            configService.saveConfig(configPath, currentConfig!!)
             reloadCore()
             val updatedGame = _uiState.value.games.firstOrNull { it.name == game.name }
-            if (updatedGame != null) {
-                selectGame(updatedGame)
-            }
+            if (updatedGame != null) selectGame(updatedGame)
         }
     }
 
@@ -209,8 +211,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val gamePath = state.addGamePath.trim()
 
         if (gameName.isBlank()) { setStatus("Game name is required."); return }
-        if (savePath.isBlank()) { setStatus("Save path is required."); return }
-        if (!isSupportedAndroidPath(savePath)) {
+        if (state.selectedSaveUnitType != SaveUnitType.Zip && savePath.isBlank()) {
+            setStatus("Save path is required."); return
+        }
+        if (savePath.isNotBlank() && !isSupportedAndroidPath(savePath)) {
             setStatus("Android save path must be an absolute path or content:// URI.")
             return
         }
@@ -218,32 +222,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             setStatus("Android game path must be an absolute path or content:// URI.")
             return
         }
-        if (config.games.any { it.name.equals(gameName, ignoreCase = true) }) {
-            setStatus("Game already exists: $gameName")
-            return
-        }
+        // Zip mode: allow adding to existing game (auto-link with Folder unit from PC)
+        val isZipMode = state.selectedSaveUnitType == SaveUnitType.Zip
+        val existingGame = config.games.firstOrNull { it.name.equals(gameName, ignoreCase = true) }
 
         viewModelScope.launch {
             runBusy("Adding $gameName...") {
-                val newGame = GameDefinition(
-                    name = gameName,
-                    save_paths = listOf(
-                        SaveUnitDefinition(
-                            id = 0,
-                            unit_type = state.selectedSaveUnitType,
-                            delete_before_apply = false,
-                            paths = mapOf(snapshot.currentDevice.deviceId to savePath)
+                val updatedConfig: ManagerConfig
+                if (isZipMode && existingGame != null) {
+                    // Add Zip unit to existing game, link to first Folder unit
+                    val folderUnit = existingGame.save_paths.firstOrNull { it.unit_type == SaveUnitType.Folder }
+                    val newZipUnit = SaveUnitDefinition(
+                        id = existingGame.next_save_unit_id,
+                        unit_type = SaveUnitType.Zip,
+                        linked_unit_ids = if (folderUnit != null) listOf(folderUnit.id) else emptyList()
+                    )
+                    // Add bidirectional link
+                    if (folderUnit != null) {
+                        val updatedFolderUnit = folderUnit.copy(
+                            linked_unit_ids = folderUnit.linked_unit_ids + newZipUnit.id
                         )
-                    ),
-                    game_paths = if (gamePath.isNotBlank())
-                        mapOf(snapshot.currentDevice.deviceId to gamePath) else emptyMap(),
-                    next_save_unit_id = 1,
-                    cloud_sync_enabled = true
-                )
-
-                val updatedConfig = config.copy(
-                    games = config.games + newGame
-                )
+                        val updatedSavePaths = existingGame.save_paths.map {
+                            if (it.id == folderUnit.id) updatedFolderUnit else it
+                        } + newZipUnit
+                        val updatedGame = existingGame.copy(
+                            save_paths = updatedSavePaths,
+                            next_save_unit_id = existingGame.next_save_unit_id + 1
+                        )
+                        updatedConfig = config.copy(
+                            games = config.games.map { if (it.name.equals(gameName, ignoreCase = true)) updatedGame else it }
+                        )
+                    } else {
+                        val updatedGame = existingGame.copy(
+                            save_paths = existingGame.save_paths + newZipUnit,
+                            next_save_unit_id = existingGame.next_save_unit_id + 1
+                        )
+                        updatedConfig = config.copy(
+                            games = config.games.map { if (it.name.equals(gameName, ignoreCase = true)) updatedGame else it }
+                        )
+                    }
+                } else {
+                    val newGame = GameDefinition(
+                        name = gameName,
+                        save_paths = listOf(
+                            SaveUnitDefinition(
+                                id = 0,
+                                unit_type = state.selectedSaveUnitType,
+                                delete_before_apply = false,
+                                paths = if (savePath.isNotBlank()) mapOf(snapshot.currentDevice.deviceId to savePath) else emptyMap()
+                            )
+                        ),
+                        game_paths = if (gamePath.isNotBlank())
+                            mapOf(snapshot.currentDevice.deviceId to gamePath) else emptyMap(),
+                        next_save_unit_id = 1,
+                        cloud_sync_enabled = true
+                    )
+                    updatedConfig = config.copy(games = config.games + newGame)
+                }
                 configService.saveConfig(configPath, updatedConfig)
                 currentConfig = updatedConfig
 
@@ -403,26 +438,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // Zip mode: ask user to select a zip file to upload
+        val hasZipUnits = ctx.game.saveUnits.any { it.unitType == SaveUnitType.Zip }
+        if (hasZipUnits) {
+            _uiState.value = _uiState.value.copy(showZipUploadPicker = true)
+            setStatus("Select a zip file to upload...")
+            return
+        }
+
         viewModelScope.launch {
             runBusy("Uploading ${ctx.game.name} current save...") {
-                val workDir = withContext(Dispatchers.IO) {
-                    val dir = File(getApplication<Application>().cacheDir, "upload-${java.util.UUID.randomUUID()}")
-                    dir.mkdirs()
-                    dir
-                }
-                try {
-                    val archivePath = archiveService.createCurrentDeviceArchive(
-                        ctx.game, ctx.snapshot.currentDevice, workDir
-                    )
-                    val result = s3CloudService.uploadCurrentSave(
-                        ctx.game, ctx.snapshot.currentDevice, ctx.cloudSettings, archivePath.absolutePath
-                    )
-                    setStatus("Uploaded current save to ${result.rootKey}.")
-                    refreshCloudCore(ctx.game, ctx.snapshot, ctx.cloudSettings)
-                } finally {
-                    workDir.deleteRecursively()
-                }
+                performUpload(ctx, null)
             }
+        }
+    }
+
+    /** Called from UI after user picks a zip file for Zip-mode upload */
+    fun uploadCurrentWithZipPath(zipPath: String) {
+        _uiState.value = _uiState.value.copy(showZipUploadPicker = false)
+        if (zipPath.isBlank()) {
+            setStatus("Upload cancelled — no file selected.")
+            return
+        }
+
+        val ctx = getCloudContext() ?: return
+
+        viewModelScope.launch {
+            runBusy("Uploading ${ctx.game.name} current save...") {
+                performUpload(ctx, zipPath)
+            }
+        }
+    }
+
+    private suspend fun performUpload(ctx: CloudContext, zipPath: String?) {
+        val workDir = withContext(Dispatchers.IO) {
+            val dir = File(getApplication<Application>().cacheDir, "upload-${java.util.UUID.randomUUID()}")
+            dir.mkdirs(); dir
+        }
+        try {
+            val archivePath = if (zipPath != null) {
+                // Zip mode: use the picked zip directly
+                File(zipPath).also { if (!it.exists()) throw IllegalStateException("Zip file not found: $zipPath") }
+            } else {
+                archiveService.createCurrentDeviceArchive(ctx.game, ctx.snapshot.currentDevice, workDir)
+            }
+            val result = s3CloudService.uploadCurrentSave(
+                ctx.game, ctx.snapshot.currentDevice, ctx.cloudSettings, archivePath.absolutePath
+            )
+            setStatus("Uploaded current save to ${result.rootKey}.")
+            refreshCloudCore(ctx.game, ctx.snapshot, ctx.cloudSettings)
+        } finally {
+            workDir.deleteRecursively()
         }
     }
 
@@ -433,32 +499,91 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // Zip mode: ask user where to save the downloaded zip file
+        val hasZipUnits = ctx.game.saveUnits.any { it.unitType == SaveUnitType.Zip }
+        if (hasZipUnits) {
+            _uiState.value = _uiState.value.copy(showZipRestorePicker = true)
+            setStatus("Select where to save the restored zip...")
+            return
+        }
+
         viewModelScope.launch {
-            runBusy("Restoring ${ctx.game.name} current save...") {
+            runBusy("Restoring ${ctx.game.name} latest cloud save...") {
+                performRestore(ctx)
+            }
+        }
+    }
+
+    /** Called from UI after user picks save location for Zip restore (URI from CreateDocument) */
+    fun restoreCurrentWithZipPath(zipSaveUri: String) {
+        _uiState.value = _uiState.value.copy(showZipRestorePicker = false)
+        if (zipSaveUri.isBlank()) {
+            setStatus("Restore cancelled — no save location selected.")
+            return
+        }
+
+        val ctx = getCloudContext() ?: return
+
+        viewModelScope.launch {
+            runBusy("Restoring ${ctx.game.name} latest cloud save...") {
                 val workDir = withContext(Dispatchers.IO) {
                     val dir = File(getApplication<Application>().cacheDir, "restore-${java.util.UUID.randomUUID()}")
-                    dir.mkdirs()
-                    dir
+                    dir.mkdirs(); dir
                 }
                 try {
+                    // Download the zip to temp
                     val result = s3CloudService.restoreCurrentSave(
                         ctx.game, ctx.snapshot.currentDevice, ctx.cloudSettings, workDir.absolutePath
                     )
-                    // Extract the downloaded archive
                     result.archivePath?.let { archivePath ->
                         val archiveFile = File(archivePath)
                         if (archiveFile.exists()) {
-                            archiveService.restoreCurrentDeviceArchive(
-                                archiveFile, ctx.game, ctx.snapshot.currentDevice
-                            )
+                            // Write the downloaded zip to the user-chosen URI
+                            val uri = android.net.Uri.parse(zipSaveUri)
+                            if (zipSaveUri.startsWith("content://")) {
+                                // Use ContentResolver for content URIs
+                                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { out ->
+                                    archiveFile.inputStream().use { it.copyTo(out) }
+                                }
+                            } else {
+                                // Use direct file I/O for real paths
+                                val targetFile = File(zipSaveUri)
+                                targetFile.parentFile?.mkdirs()
+                                archiveFile.copyTo(targetFile, overwrite = true)
+                            }
                         }
                     }
-                    setStatus("Restored current save from ${result.rootKey}.")
+                    setStatus("Restored latest cloud save from ${result.rootKey}.")
                     refreshCloudCore(ctx.game, ctx.snapshot, ctx.cloudSettings)
                 } finally {
                     workDir.deleteRecursively()
                 }
             }
+        }
+    }
+
+    private suspend fun performRestore(ctx: CloudContext) {
+        val workDir = withContext(Dispatchers.IO) {
+            val dir = File(getApplication<Application>().cacheDir, "restore-${java.util.UUID.randomUUID()}")
+            dir.mkdirs()
+            dir
+        }
+        try {
+            val result = s3CloudService.restoreCurrentSave(
+                ctx.game, ctx.snapshot.currentDevice, ctx.cloudSettings, workDir.absolutePath
+            )
+            result.archivePath?.let { archivePath ->
+                val archiveFile = File(archivePath)
+                if (archiveFile.exists()) {
+                    archiveService.restoreCurrentDeviceArchive(
+                        archiveFile, ctx.game, ctx.snapshot.currentDevice
+                    )
+                }
+            }
+            setStatus("Restored latest cloud save from ${result.rootKey}.")
+            refreshCloudCore(ctx.game, ctx.snapshot, ctx.cloudSettings)
+        } finally {
+            workDir.deleteRecursively()
         }
     }
 
@@ -484,13 +609,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(statusMessage = message)
     }
 
+    // --- Config Editor ---
+    fun loadConfigRaw(): String {
+        return try {
+            java.io.File(configPath).readText()
+        } catch (_: Exception) {
+            "{}"
+        }
+    }
+
+    fun saveConfigRaw(rawJson: String) {
+        viewModelScope.launch {
+            runBusy("Saving config...") {
+                try {
+                    configService.saveConfigRaw(configPath, rawJson)
+                    reloadCore()
+                    setStatus("Config saved and reloaded.")
+                } catch (e: Exception) {
+                    setStatus("Invalid JSON: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun importConfigFile(uri: android.net.Uri) {
+        viewModelScope.launch {
+            runBusy("Importing config...") {
+                try {
+                    val stream = getApplication<Application>().contentResolver.openInputStream(uri)
+                        ?: throw IllegalStateException("Cannot open file")
+                    val content = stream.bufferedReader().readText()
+                    stream.close()
+                    configService.saveConfigRaw(configPath, content)
+                    reloadCore()
+                    setStatus("Config imported successfully.")
+                } catch (e: Exception) {
+                    setStatus("Import failed: ${e.message}")
+                }
+            }
+        }
+    }
+
     private fun setStatus(message: String) {
         _uiState.value = _uiState.value.copy(statusMessage = message)
     }
 
     private fun hasCurrentDevicePaths(gameName: String, deviceId: String): Boolean {
         val gameDef = currentConfig?.games?.firstOrNull { it.name.equals(gameName, ignoreCase = true) }
-        return gameDef?.save_paths?.any { unit -> unit.paths.containsKey(deviceId) } == true
+        return gameDef?.save_paths?.any { unit ->
+            unit.paths.containsKey(deviceId) || unit.unit_type == SaveUnitType.Zip
+        } == true
     }
 
     private data class CloudContext(

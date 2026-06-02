@@ -30,12 +30,22 @@ public sealed class ArchiveTransferService
                 CanIncludePath(item.SaveUnit.UnitType, item.CurrentPath.Path))
             .ToArray();
 
+        // Pure Zip mode: all units are Zip type → return the zip file directly
+        if (includedUnits.Length > 0 && includedUnits.All(item => item.SaveUnit.UnitType == SaveUnitType.Zip))
+        {
+            return includedUnits[0].CurrentPath!.Path;
+        }
+
         var useFlatSingleUnitLayout = includedUnits.Length == 1;
 
         foreach (var item in includedUnits)
         {
             var saveUnit = item.SaveUnit;
             var currentPath = item.CurrentPath!;
+
+            if (saveUnit.UnitType == SaveUnitType.Zip)
+                continue;
+
             var stagedPath = useFlatSingleUnitLayout
                 ? stagingDirectory
                 : Path.Combine(stagingDirectory, saveUnit.Id.ToString());
@@ -70,6 +80,25 @@ public sealed class ArchiveTransferService
         GameSnapshot game,
         CurrentDeviceContext currentDevice)
     {
+        // Zip type: save downloaded zip directly to target path without extraction
+        var zipUnits = game.SaveUnits
+            .Where(u => u.UnitType == SaveUnitType.Zip)
+            .Select(u => new { Unit = u, Path = u.Paths.FirstOrDefault(p => string.Equals(p.DeviceId, currentDevice.DeviceId, StringComparison.Ordinal)) })
+            .Where(x => x.Path is not null && !string.IsNullOrWhiteSpace(x.Path.Path))
+            .ToArray();
+
+        if (zipUnits.Length > 0)
+        {
+            foreach (var item in zipUnits)
+            {
+                var targetDir = Path.GetDirectoryName(item.Path!.Path);
+                if (!string.IsNullOrWhiteSpace(targetDir)) Directory.CreateDirectory(targetDir);
+                File.Copy(archivePath, item.Path.Path, overwrite: true);
+                AppLogger.Info($"Restore Zip unit {item.Unit.Id}: saved to {item.Path.Path}");
+            }
+            return;
+        }
+
         var extractRoot = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager", "restore", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(extractRoot);
         try
@@ -195,9 +224,9 @@ public sealed class ArchiveTransferService
     private bool CanIncludePath(SaveUnitType unitType, string path)
     {
         if (unitType == SaveUnitType.WinRegistry)
-        {
             return _registryTransferService.KeyExists(path);
-        }
+        if (unitType == SaveUnitType.Zip)
+            return File.Exists(path);
 
         return File.Exists(path) || Directory.Exists(path);
     }

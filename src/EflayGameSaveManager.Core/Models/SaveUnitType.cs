@@ -7,5 +7,6 @@ public enum SaveUnitType
 {
     Folder,
     File,
-    WinRegistry
+    WinRegistry,
+    Zip
 }

@@ -155,6 +155,24 @@ public sealed class CloudSyncService
         return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, currentBackup, cancellationToken);
     }
 
+    public async Task<CloudDownloadResult> RestoreGameLatestSaveAsync(
+        GameSnapshot game,
+        CurrentDeviceContext currentDevice,
+        CloudSettings cloudSettings,
+        CancellationToken cancellationToken = default)
+    {
+        AppLogger.Info(
+            $"Cloud restore-latest start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
+        var backups = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken)
+                      ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
+        var latestBackup = ResolveLatestBackup(backups)
+                           ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
+        AppLogger.Info(
+            $"Cloud restore-latest resolved backup: game={game.Name}, device={currentDevice.DeviceId}, backupDate={latestBackup.Date}, backupDevice={latestBackup.DeviceId}, backupPath={latestBackup.Path}");
+
+        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, latestBackup, cancellationToken);
+    }
+
     public async Task<CloudDownloadResult> RestoreGameBackupAsync(
         GameSnapshot game,
         CurrentDeviceContext currentDevice,
@@ -587,6 +605,13 @@ public sealed class CloudSyncService
             return deviceBackup;
         }
 
+        return backups.Backups
+            .OrderByDescending(item => item.Date, StringComparer.Ordinal)
+            .FirstOrDefault();
+    }
+
+    private static LegacyBackupEntry? ResolveLatestBackup(LegacyGameBackups backups)
+    {
         return backups.Backups
             .OrderByDescending(item => item.Date, StringComparer.Ordinal)
             .FirstOrDefault();

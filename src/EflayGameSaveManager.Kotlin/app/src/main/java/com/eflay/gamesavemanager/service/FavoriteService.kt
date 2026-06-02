@@ -1,44 +1,33 @@
 package com.eflay.gamesavemanager.service
 
-import android.content.Context
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.serializer
+import com.eflay.gamesavemanager.model.FavoriteNode
+import java.util.UUID
 
-class FavoriteService(context: Context) {
+/**
+ * Manages favorites via the ManagerConfig.favorites array.
+ * The ViewModel is responsible for saving the config after mutations.
+ */
+object FavoriteService {
 
-    private val prefs = context.getSharedPreferences("favorites", Context.MODE_PRIVATE)
-    private val json = Json { ignoreUnknownKeys = true }
-
-    companion object {
-        private const val KEY_FAVORITE_NAMES = "favorite_game_names"
+    /** Parse favorite labels from config's favorites array. */
+    fun loadLabels(favorites: List<FavoriteNode>): Set<String> {
+        return favorites
+            .filter { it.is_leaf && it.label.isNotBlank() }
+            .map { it.label }
+            .toSet()
     }
 
-    fun load(): Set<String> {
-        val jsonStr = prefs.getString(KEY_FAVORITE_NAMES, null) ?: return emptySet()
-        if (jsonStr.isBlank()) return emptySet()
-        return try {
-            val list = json.decodeFromString(ListSerializer(String.serializer()), jsonStr)
-            list.filter { it.isNotBlank() }.toSet()
-        } catch (_: Exception) {
-            emptySet()
+    /** Toggle a game in the favorites array. Returns the updated list. */
+    fun toggle(favorites: List<FavoriteNode>, gameName: String): List<FavoriteNode> {
+        val existing = favorites.firstOrNull { it.label == gameName }
+        return if (existing != null) {
+            favorites.filter { it.label != gameName }
+        } else {
+            favorites + FavoriteNode(
+                node_id = UUID.randomUUID().toString(),
+                label = gameName,
+                is_leaf = true
+            )
         }
-    }
-
-    fun save(names: Set<String>) {
-        val sorted = names.filter { it.isNotBlank() }
-            .sortedBy { it.lowercase() }
-        prefs.edit()
-            .putString(KEY_FAVORITE_NAMES, json.encodeToString(ListSerializer(String.serializer()), sorted))
-            .apply()
-    }
-
-    fun toggle(name: String): Set<String> {
-        val current = load().toMutableSet()
-        if (!current.add(name)) {
-            current.remove(name)
-        }
-        save(current)
-        return current
     }
 }

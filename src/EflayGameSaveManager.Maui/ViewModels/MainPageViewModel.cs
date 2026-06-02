@@ -11,6 +11,10 @@ namespace EflayGameSaveManager.Maui.ViewModels;
 
 public partial class MainPageViewModel : ObservableObject
 {
+    private const string NavigationTabFavorites = "Favorites";
+    private const string NavigationTabAllGames = "AllGames";
+    private const string NavigationTabConfig = "Config";
+
     private readonly GameSaveManagerConfigurationService _configurationService;
     private readonly GameLibraryService _gameLibraryService;
     private readonly CloudSyncService _cloudSyncService;
@@ -34,6 +38,9 @@ public partial class MainPageViewModel : ObservableObject
 
     [ObservableProperty]
     private GameListItemViewModel? _selectedGame;
+
+    [ObservableProperty]
+    private GameListItemViewModel? _selectedFavoriteGame;
 
     [ObservableProperty]
     private string _selectedGameTitle = "Select a game";
@@ -63,6 +70,15 @@ public partial class MainPageViewModel : ObservableObject
     private bool _isAddGameVisible;
 
     [ObservableProperty]
+    private bool _isNavigationDrawerOpen;
+
+    [ObservableProperty]
+    private string _selectedNavigationTab = NavigationTabAllGames;
+
+    [ObservableProperty]
+    private string _configRawText = string.Empty;
+
+    [ObservableProperty]
     private string _addGameName = string.Empty;
 
     [ObservableProperty]
@@ -73,6 +89,9 @@ public partial class MainPageViewModel : ObservableObject
 
     [ObservableProperty]
     private string _selectedSaveUnitType = "Folder";
+
+    [ObservableProperty]
+    private bool _hasNoFavoriteGames = true;
 
     public MainPageViewModel(
         GameSaveManagerConfigurationService configurationService,
@@ -100,11 +119,45 @@ public partial class MainPageViewModel : ObservableObject
 
     public IReadOnlyList<string> SaveUnitTypeOptions { get; } = ["Folder", "File"];
 
-    public bool HasNoFavoriteGames => FavoriteGames.Count == 0;
+    public bool IsFavoriteSelected => SelectedFavoriteGame is not null;
+
+    public string SelectedTabTitle => SelectedNavigationTab switch
+    {
+        NavigationTabFavorites => "Favorites",
+        NavigationTabConfig => "Config",
+        _ => "All games"
+    };
+
+    public bool IsFavoritesTabSelected => string.Equals(SelectedNavigationTab, NavigationTabFavorites, StringComparison.Ordinal);
+
+    public bool IsAllGamesTabSelected => string.Equals(SelectedNavigationTab, NavigationTabAllGames, StringComparison.Ordinal);
+
+    public bool IsConfigTabSelected => string.Equals(SelectedNavigationTab, NavigationTabConfig, StringComparison.Ordinal);
 
     partial void OnSelectedGameChanged(GameListItemViewModel? value)
     {
         ApplySelectedGame(value);
+    }
+
+    partial void OnSelectedFavoriteGameChanged(GameListItemViewModel? value)
+    {
+        if (value is not null)
+        {
+            SelectedGame = value;
+        }
+
+        OnPropertyChanged(nameof(IsFavoriteSelected));
+        OnPropertyChanged(nameof(SelectedGameTitle));
+        OnPropertyChanged(nameof(SelectedGameSummary));
+        OnPropertyChanged(nameof(CloudDetails));
+    }
+
+    partial void OnSelectedNavigationTabChanged(string value)
+    {
+        OnPropertyChanged(nameof(SelectedTabTitle));
+        OnPropertyChanged(nameof(IsFavoritesTabSelected));
+        OnPropertyChanged(nameof(IsAllGamesTabSelected));
+        OnPropertyChanged(nameof(IsConfigTabSelected));
     }
 
     public async Task InitializeAsync()
@@ -140,6 +193,7 @@ public partial class MainPageViewModel : ObservableObject
             $"Device: {_currentSnapshot.CurrentDevice.DeviceName} [{_currentSnapshot.CurrentDevice.DeviceId}] | Platform: {DeviceInfo.Current.Platform}";
 
         var previousSelection = SelectedGame?.Name;
+        var previousFavoriteSelection = SelectedFavoriteGame?.Name;
         Games.Clear();
         FavoriteGames.Clear();
 
@@ -153,10 +207,18 @@ public partial class MainPageViewModel : ObservableObject
             }
         }
 
-        OnPropertyChanged(nameof(HasNoFavoriteGames));
+        HasNoFavoriteGames = FavoriteGames.Count == 0;
 
         SelectedGame = Games.FirstOrDefault(item => string.Equals(item.Name, previousSelection, StringComparison.OrdinalIgnoreCase))
                        ?? Games.FirstOrDefault();
+        if (IsFavoritesTabSelected || !string.IsNullOrWhiteSpace(previousFavoriteSelection))
+        {
+            RestoreFavoriteSelection(previousFavoriteSelection);
+        }
+        else
+        {
+            SelectedFavoriteGame = null;
+        }
 
         StatusMessage = Games.Count == 0
             ? "No games found yet. Add the Android games you want to sync."
@@ -170,12 +232,77 @@ public partial class MainPageViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ToggleNavigationDrawer()
+    {
+        IsNavigationDrawerOpen = !IsNavigationDrawerOpen;
+    }
+
+    [RelayCommand]
+    private void CloseNavigationDrawer()
+    {
+        IsNavigationDrawerOpen = false;
+    }
+
+    [RelayCommand]
+    private async Task SelectNavigationTabAsync(string? tab)
+    {
+        SelectedNavigationTab = tab switch
+        {
+            NavigationTabFavorites => NavigationTabFavorites,
+            NavigationTabConfig => NavigationTabConfig,
+            _ => NavigationTabAllGames
+        };
+
+        IsNavigationDrawerOpen = false;
+
+        if (IsConfigTabSelected)
+        {
+            await LoadConfigTextAsync();
+        }
+        else if (IsFavoritesTabSelected)
+        {
+            RestoreFavoriteSelection(SelectedFavoriteGame?.Name ?? SelectedGame?.Name);
+        }
+    }
+
+    [RelayCommand]
     private void SelectGame(GameListItemViewModel? game)
     {
         if (game is not null)
         {
             SelectedGame = game;
+            SelectedNavigationTab = NavigationTabAllGames;
         }
+    }
+
+    [RelayCommand]
+    private void SelectFavoriteGame(GameListItemViewModel? game)
+    {
+        if (game is null)
+        {
+            return;
+        }
+
+        SelectedFavoriteGame = FavoriteGames.FirstOrDefault(item =>
+            string.Equals(item.Name, game.Name, StringComparison.OrdinalIgnoreCase)) ?? game;
+        SelectedNavigationTab = NavigationTabFavorites;
+    }
+
+    private void RestoreFavoriteSelection(string? preferredGameName)
+    {
+        if (FavoriteGames.Count == 0)
+        {
+            SelectedFavoriteGame = null;
+            return;
+        }
+
+        SelectedFavoriteGame = FavoriteGames.FirstOrDefault(item =>
+                                   !string.IsNullOrWhiteSpace(preferredGameName) &&
+                                   string.Equals(item.Name, preferredGameName, StringComparison.OrdinalIgnoreCase))
+                               ?? FavoriteGames.FirstOrDefault(item =>
+                                   SelectedGame is not null &&
+                                   string.Equals(item.Name, SelectedGame.Name, StringComparison.OrdinalIgnoreCase))
+                               ?? FavoriteGames.FirstOrDefault();
     }
 
     [RelayCommand]
@@ -196,6 +323,7 @@ public partial class MainPageViewModel : ObservableObject
         _favoriteGamesService.Save(_favoriteGameNames);
         await ReloadCoreAsync();
         SelectedGame = Games.FirstOrDefault(item => string.Equals(item.Name, target.Name, StringComparison.OrdinalIgnoreCase));
+        RestoreFavoriteSelection(target.Name);
     }
 
     [RelayCommand]
@@ -277,7 +405,7 @@ public partial class MainPageViewModel : ObservableObject
         }
 
         await RunBusyAsync(
-            $"Restoring {game.Name} current save...",
+            $"Restoring {game.Name} latest cloud save...",
             async () =>
             {
 #if ANDROID
@@ -289,10 +417,10 @@ public partial class MainPageViewModel : ObservableObject
                         ? _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, snapshot.CurrentDevice.DeviceName)
                         : snapshot;
 
-                    var result = await _cloudSyncService.RestoreGameCurrentSaveAsync(
+                    var result = await _cloudSyncService.RestoreGameLatestSaveAsync(
                         restoreSnapshot.Games.First(g => g.Name == game.Name),
                         snapshot.CurrentDevice, cloudSettings);
-                    StatusMessage = $"Restored current save from {result.RootKey}.";
+                    StatusMessage = $"Restored latest cloud save from {result.RootKey}.";
 #if ANDROID
                     await ApplyRestoredFilesToRestrictedPathsAsync(redirectMap);
 #endif
@@ -664,6 +792,69 @@ public partial class MainPageViewModel : ObservableObject
                 await ReloadCoreAsync();
                 SelectedGame = Games.FirstOrDefault(item => string.Equals(item.Name, game.Name, StringComparison.OrdinalIgnoreCase));
                 StatusMessage = $"Updated Android paths for {game.Name}.";
+            });
+    }
+
+    [RelayCommand]
+    private async Task LoadConfigTextAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_configPath) || !File.Exists(_configPath))
+        {
+            ConfigRawText = "{}";
+            StatusMessage = "Configuration is not loaded yet.";
+            return;
+        }
+
+        try
+        {
+            ConfigRawText = await File.ReadAllTextAsync(_configPath);
+            StatusMessage = "Config loaded.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Failed to load config: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveConfigTextAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_configPath))
+        {
+            StatusMessage = "Configuration is not loaded yet.";
+            return;
+        }
+
+        await RunBusyAsync(
+            "Saving config...",
+            async () =>
+            {
+                var validationPath = Path.Combine(FileSystem.CacheDirectory, $"config-validation-{Guid.NewGuid():N}.json");
+                try
+                {
+                    await File.WriteAllTextAsync(validationPath, ConfigRawText);
+                    await _configurationService.LoadAsync(validationPath);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (File.Exists(validationPath))
+                        {
+                            File.Delete(validationPath);
+                        }
+                    }
+                    catch
+                    {
+                        // Best effort cleanup.
+                    }
+                }
+
+                await File.WriteAllTextAsync(_configPath, ConfigRawText);
+                _currentConfig = await _configurationService.LoadAsync(_configPath);
+                await ReloadCoreAsync();
+                await LoadConfigTextAsync();
+                StatusMessage = "Config saved and reloaded.";
             });
     }
 

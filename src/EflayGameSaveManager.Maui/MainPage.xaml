@@ -7,122 +7,225 @@
              x:DataType="viewModels:MainPageViewModel"
              BackgroundColor="{StaticResource SurfaceColor}"
              Title="Game Save Sync">
-    <ScrollView>
-        <VerticalStackLayout Padding="18" Spacing="14">
-            <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
-                <VerticalStackLayout Spacing="6">
-                    <Label Text="Android-first save sync" FontSize="24" FontAttributes="Bold" />
-                    <Label Text="{Binding CurrentDeviceSummary}" FontSize="13" TextColor="{StaticResource MutedTextColor}" />
-                    <Label Text="{Binding ConfigPathSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
-                    <Label Text="{Binding StatusMessage}" FontSize="13" TextColor="{StaticResource AccentColor}" LineBreakMode="WordWrap" />
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                        <Button Grid.Column="0" Text="Reload" Command="{Binding ReloadCommand}" />
-                        <Button Grid.Column="1" Text="Add game" Command="{Binding ToggleAddGameCommand}" />
-                    </Grid>
+    <Grid>
+        <Grid RowDefinitions="Auto,Auto,*">
+            <Grid Grid.Row="0"
+                  Padding="12,10"
+                  ColumnDefinitions="Auto,*"
+                  ColumnSpacing="10"
+                  BackgroundColor="{StaticResource PanelColor}">
+                <Button Grid.Column="0"
+                        Text="Menu"
+                        FontSize="13"
+                        WidthRequest="46"
+                        HeightRequest="42"
+                        Command="{Binding ToggleNavigationDrawerCommand}" />
+                <VerticalStackLayout Grid.Column="1" Spacing="2">
+                    <Label Text="{Binding SelectedTabTitle}" FontSize="20" FontAttributes="Bold" />
+                    <Label Text="{Binding CurrentDeviceSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="TailTruncation" />
                 </VerticalStackLayout>
-            </Border>
+            </Grid>
 
-            <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14" IsVisible="{Binding IsAddGameVisible}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Add game" FontSize="20" FontAttributes="Bold" />
-                    <Entry Text="{Binding AddGameName}" Placeholder="Game name" />
-                    <Picker Title="Save unit type"
-                            ItemsSource="{Binding SaveUnitTypeOptions}"
-                            SelectedItem="{Binding SelectedSaveUnitType}" />
-                    <Entry Text="{Binding AddSavePath}" Placeholder="Save file path or save folder path" />
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                        <Button Grid.Column="0" Text="Pick file" Command="{Binding PickSaveFileCommand}" />
-                        <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSaveFolderCommand}" />
-                    </Grid>
-                    <Entry Text="{Binding AddGamePath}" Placeholder="Game launch path (optional)" />
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                        <Button Grid.Column="0" Text="Create" Command="{Binding AddGameCommand}" />
-                        <Button Grid.Column="1" Text="Close" Command="{Binding ToggleAddGameCommand}" />
-                    </Grid>
-                    <Label Text="First Android pass keeps file and folder sync only. Switch emulator zip sync is tracked in docs/ANDROID_MAUI_TODO.md." FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
-                </VerticalStackLayout>
-            </Border>
+            <Label Grid.Row="1"
+                   Text="{Binding StatusMessage}"
+                   Padding="18,8"
+                   FontSize="13"
+                   TextColor="{StaticResource AccentColor}"
+                   LineBreakMode="WordWrap" />
 
-            <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Favorites" FontSize="20" FontAttributes="Bold" />
-                    <Label Text="Games you care about on Android can stay here for quick cloud sync." FontSize="12" TextColor="{StaticResource MutedTextColor}" />
-                    <CollectionView ItemsSource="{Binding FavoriteGames}" SelectionMode="None" HeightRequest="100">
-                        <CollectionView.ItemsLayout>
-                            <LinearItemsLayout Orientation="Horizontal" ItemSpacing="8" />
-                        </CollectionView.ItemsLayout>
-                        <CollectionView.ItemTemplate>
-                            <DataTemplate x:DataType="viewModels:GameListItemViewModel">
-                                <Border Padding="10" BackgroundColor="#E8F0E4" StrokeThickness="0">
-                                    <VerticalStackLayout Spacing="6" WidthRequest="180">
-                                        <Label Text="{Binding Name}" FontAttributes="Bold" LineBreakMode="TailTruncation" />
-                                        <Label Text="{Binding Summary}" FontSize="11" TextColor="{StaticResource MutedTextColor}" LineBreakMode="TailTruncation" />
-                                        <Button Text="Open"
-                                                Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.SelectGameCommand}"
-                                                CommandParameter="{Binding .}" />
+            <Grid Grid.Row="2">
+                <ScrollView IsVisible="{Binding IsFavoritesTabSelected}">
+                    <VerticalStackLayout Padding="14" Spacing="10">
+                        <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="Favorites" FontSize="20" FontAttributes="Bold" />
+                                <Label Text="Tap a favorite tag to show cloud actions here." FontSize="12" TextColor="{StaticResource MutedTextColor}" />
+                                <FlexLayout BindableLayout.ItemsSource="{Binding FavoriteGames}"
+                                            Direction="Row"
+                                            Wrap="Wrap"
+                                            AlignItems="Start"
+                                            JustifyContent="Start">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:GameListItemViewModel">
+                                            <Button Text="{Binding Name}"
+                                                    Margin="0,0,8,8"
+                                                    Padding="12,8"
+                                                    FontSize="13"
+                                                    BackgroundColor="#E8F0E4"
+                                                    TextColor="{StaticResource TextColor}"
+                                                    Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.SelectFavoriteGameCommand}"
+                                                    CommandParameter="{Binding .}" />
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </FlexLayout>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <!-- Inline cloud actions for selected favorite -->
+                        <VerticalStackLayout Spacing="10" IsVisible="{Binding IsFavoriteSelected}">
+                            <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
+                                <VerticalStackLayout Spacing="8">
+                                    <Label Text="{Binding SelectedGameTitle}" FontSize="18" FontAttributes="Bold" />
+                                    <Label Text="{Binding SelectedGameSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" />
+                                    <Editor Text="{Binding CloudDetails}" AutoSize="TextChanges" IsReadOnly="True" MinimumHeightRequest="80" BackgroundColor="#EDF4F7" FontSize="12" />
+                                    <VerticalStackLayout Spacing="6">
+                                        <Button Text="Refresh cloud" Command="{Binding RefreshCloudCommand}" />
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                            <Button Grid.Column="0" Text="Upload current" Command="{Binding UploadCurrentCommand}" />
+                                            <Button Grid.Column="1" Text="Restore latest" Command="{Binding RestoreCurrentCommand}" />
+                                        </Grid>
+                                        <Button Text="Unfavorite" Command="{Binding ToggleFavoriteCommand}" CommandParameter="{Binding SelectedFavoriteGame}" />
+                                    </VerticalStackLayout>
+                                </VerticalStackLayout>
+                            </Border>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </ScrollView>
+
+                <ScrollView IsVisible="{Binding IsAllGamesTabSelected}">
+                    <VerticalStackLayout Padding="14" Spacing="14">
+                        <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="Android-first save sync" FontSize="24" FontAttributes="Bold" />
+                                <Label Text="{Binding CurrentDeviceSummary}" FontSize="13" TextColor="{StaticResource MutedTextColor}" />
+                                <Label Text="{Binding ConfigPathSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                    <Button Grid.Column="0" Text="Reload" Command="{Binding ReloadCommand}" />
+                                    <Button Grid.Column="1" Text="Add game" Command="{Binding ToggleAddGameCommand}" />
+                                </Grid>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14" IsVisible="{Binding IsAddGameVisible}">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="Add game" FontSize="20" FontAttributes="Bold" />
+                                <Entry Text="{Binding AddGameName}" Placeholder="Game name" />
+                                <Picker Title="Save unit type"
+                                        ItemsSource="{Binding SaveUnitTypeOptions}"
+                                        SelectedItem="{Binding SelectedSaveUnitType}" />
+                                <Entry Text="{Binding AddSavePath}" Placeholder="Save file path or save folder path" />
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                    <Button Grid.Column="0" Text="Pick file" Command="{Binding PickSaveFileCommand}" />
+                                    <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSaveFolderCommand}" />
+                                </Grid>
+                                <Entry Text="{Binding AddGamePath}" Placeholder="Game launch path (optional)" />
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                    <Button Grid.Column="0" Text="Create" Command="{Binding AddGameCommand}" />
+                                    <Button Grid.Column="1" Text="Close" Command="{Binding ToggleAddGameCommand}" />
+                                </Grid>
+                                <Label Text="First Android pass keeps file and folder sync only. Switch emulator zip sync is tracked in docs/ANDROID_MAUI_TODO.md." FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="All games" FontSize="20" FontAttributes="Bold" />
+                                <CollectionView ItemsSource="{Binding Games}"
+                                                SelectionMode="Single"
+                                                SelectedItem="{Binding SelectedGame, Mode=TwoWay}"
+                                                HeightRequest="260">
+                                    <CollectionView.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:GameListItemViewModel">
+                                            <Grid ColumnDefinitions="*,Auto" Padding="0,8">
+                                                <VerticalStackLayout Grid.Column="0" Spacing="2">
+                                                    <Label Text="{Binding Name}" FontAttributes="Bold" />
+                                                    <Label Text="{Binding Summary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="TailTruncation" />
+                                                </VerticalStackLayout>
+                                                <Button Grid.Column="1"
+                                                        Text="{Binding FavoriteButtonText}"
+                                                        Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.ToggleFavoriteCommand}"
+                                                        CommandParameter="{Binding .}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </CollectionView.ItemTemplate>
+                                </CollectionView>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="{Binding SelectedGameTitle}" FontSize="20" FontAttributes="Bold" />
+                                <Label Text="{Binding SelectedGameSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
+                                <Editor Text="{Binding SelectedGameDetails}" AutoSize="TextChanges" IsReadOnly="True" MinimumHeightRequest="140" BackgroundColor="#FFF8EE" />
+                                <Border BackgroundColor="#F7FBF4" StrokeThickness="0" Padding="12">
+                                    <VerticalStackLayout Spacing="10">
+                                        <Label Text="Android paths for this game" FontSize="16" FontAttributes="Bold" />
+                                        <Picker Title="Save unit target"
+                                                ItemsSource="{Binding SaveUnitTargets}"
+                                                SelectedItem="{Binding SelectedSaveUnitTarget}"
+                                                ItemDisplayBinding="{Binding Label}" />
+                                        <Entry Text="{Binding EditSavePath}" Placeholder="Android save file path or folder path" />
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                            <Button Grid.Column="0" Text="Pick file" Command="{Binding PickSelectedSaveFileCommand}" />
+                                            <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSelectedSaveFolderCommand}" />
+                                        </Grid>
+                                        <Entry Text="{Binding EditGamePath}" Placeholder="Android game launch path (optional)" />
+                                        <Button Text="Save Android paths" Command="{Binding SaveSelectedGamePathsCommand}" />
                                     </VerticalStackLayout>
                                 </Border>
-                            </DataTemplate>
-                        </CollectionView.ItemTemplate>
-                    </CollectionView>
-                    <Label IsVisible="{Binding HasNoFavoriteGames}" Text="No favorites yet. Star the games you want quick access to." FontSize="12" TextColor="{StaticResource MutedTextColor}" />
-                </VerticalStackLayout>
-            </Border>
+                                <VerticalStackLayout Spacing="8">
+                                    <Button Text="Refresh cloud" Command="{Binding RefreshCloudCommand}" />
+                                    <Button Text="Upload current" Command="{Binding UploadCurrentCommand}" />
+                                    <Button Text="Restore latest" Command="{Binding RestoreCurrentCommand}" />
+                                </VerticalStackLayout>
+                                <Editor Text="{Binding CloudDetails}" AutoSize="TextChanges" IsReadOnly="True" MinimumHeightRequest="120" BackgroundColor="#EDF4F7" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </VerticalStackLayout>
+                </ScrollView>
 
-            <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="All games" FontSize="20" FontAttributes="Bold" />
-                    <CollectionView ItemsSource="{Binding Games}"
-                                    SelectionMode="Single"
-                                    SelectedItem="{Binding SelectedGame, Mode=TwoWay}"
-                                    HeightRequest="260">
-                        <CollectionView.ItemTemplate>
-                            <DataTemplate x:DataType="viewModels:GameListItemViewModel">
-                                <Grid ColumnDefinitions="*,Auto" Padding="0,8">
-                                    <VerticalStackLayout Grid.Column="0" Spacing="2">
-                                        <Label Text="{Binding Name}" FontAttributes="Bold" />
-                                        <Label Text="{Binding Summary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="TailTruncation" />
-                                    </VerticalStackLayout>
-                                    <Button Grid.Column="1"
-                                            Text="{Binding FavoriteButtonText}"
-                                            Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.ToggleFavoriteCommand}"
-                                            CommandParameter="{Binding .}" />
-                                </Grid>
-                            </DataTemplate>
-                        </CollectionView.ItemTemplate>
-                    </CollectionView>
-                </VerticalStackLayout>
-            </Border>
-
-            <Border BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="{Binding SelectedGameTitle}" FontSize="20" FontAttributes="Bold" />
-                    <Label Text="{Binding SelectedGameSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
-                    <Editor Text="{Binding SelectedGameDetails}" AutoSize="TextChanges" IsReadOnly="True" MinimumHeightRequest="140" BackgroundColor="#FFF8EE" />
-                    <Border BackgroundColor="#F7FBF4" StrokeThickness="0" Padding="12">
-                        <VerticalStackLayout Spacing="10">
-                            <Label Text="Android paths for this game" FontSize="16" FontAttributes="Bold" />
-                            <Picker Title="Save unit target"
-                                    ItemsSource="{Binding SaveUnitTargets}"
-                                    SelectedItem="{Binding SelectedSaveUnitTarget}"
-                                    ItemDisplayBinding="{Binding Label}" />
-                            <Entry Text="{Binding EditSavePath}" Placeholder="Android save file path or folder path" />
+                <Grid IsVisible="{Binding IsConfigTabSelected}" Padding="14" RowDefinitions="Auto,*">
+                    <Border Grid.Row="0" BackgroundColor="{StaticResource PanelColor}" StrokeThickness="0" Padding="14">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Edit GameSaveManager.config.json" FontSize="18" FontAttributes="Bold" />
+                            <Label Text="{Binding ConfigPathSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                                <Button Grid.Column="0" Text="Pick file" Command="{Binding PickSelectedSaveFileCommand}" />
-                                <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSelectedSaveFolderCommand}" />
+                                <Button Grid.Column="0" Text="Reload" Command="{Binding LoadConfigTextCommand}" />
+                                <Button Grid.Column="1" Text="Save" Command="{Binding SaveConfigTextCommand}" />
                             </Grid>
-                            <Entry Text="{Binding EditGamePath}" Placeholder="Android game launch path (optional)" />
-                            <Button Text="Save Android paths" Command="{Binding SaveSelectedGamePathsCommand}" />
                         </VerticalStackLayout>
                     </Border>
-                    <VerticalStackLayout Spacing="8">
-                        <Button Text="Refresh cloud" Command="{Binding RefreshCloudCommand}" />
-                        <Button Text="Upload current" Command="{Binding UploadCurrentCommand}" />
-                        <Button Text="Restore current" Command="{Binding RestoreCurrentCommand}" />
-                    </VerticalStackLayout>
-                    <Editor Text="{Binding CloudDetails}" AutoSize="TextChanges" IsReadOnly="True" MinimumHeightRequest="120" BackgroundColor="#EDF4F7" />
-                </VerticalStackLayout>
-            </Border>
-        </VerticalStackLayout>
-    </ScrollView>
+                    <Editor Grid.Row="1"
+                            Text="{Binding ConfigRawText}"
+                            Margin="0,10,0,0"
+                            AutoSize="Disabled"
+                            BackgroundColor="#FFFDF7"
+                            FontSize="12" />
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <BoxView BackgroundColor="#66000000"
+                 IsVisible="{Binding IsNavigationDrawerOpen}">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseNavigationDrawerCommand}" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+
+        <Border HorizontalOptions="Start"
+                VerticalOptions="Fill"
+                WidthRequest="300"
+                Padding="16"
+                BackgroundColor="{StaticResource PanelColor}"
+                StrokeThickness="0"
+                IsVisible="{Binding IsNavigationDrawerOpen}">
+            <VerticalStackLayout Spacing="10">
+                <Label Text="Game Save Manager" FontSize="20" FontAttributes="Bold" />
+                <Label Text="{Binding CurrentDeviceSummary}" FontSize="11" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
+                <Label Text="{Binding ConfigPathSummary}" FontSize="11" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
+                <BoxView HeightRequest="1" BackgroundColor="#DDD7CC" Margin="0,6" />
+                <Button Text="Favorites"
+                        Command="{Binding SelectNavigationTabCommand}"
+                        CommandParameter="Favorites" />
+                <Button Text="All games"
+                        Command="{Binding SelectNavigationTabCommand}"
+                        CommandParameter="AllGames" />
+                <Button Text="Config"
+                        Command="{Binding SelectNavigationTabCommand}"
+                        CommandParameter="Config" />
+                <BoxView HeightRequest="1" BackgroundColor="#DDD7CC" Margin="0,6" />
+                <Button Text="Close" Command="{Binding CloseNavigationDrawerCommand}" />
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
 </ContentPage>

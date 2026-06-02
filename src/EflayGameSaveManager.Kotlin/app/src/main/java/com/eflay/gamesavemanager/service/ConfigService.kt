@@ -30,9 +30,15 @@ class ConfigService(private val context: Context) {
     }
 
     suspend fun saveConfig(configPath: String, config: ManagerConfig) = withContext(Dispatchers.IO) {
+        saveConfigRaw(configPath, json.encodeToString(ManagerConfig.serializer(), config))
+    }
+
+    fun saveConfigRaw(configPath: String, rawJson: String) {
+        // Validate JSON is parseable before saving
+        json.decodeFromString(ManagerConfig.serializer(), rawJson)
         val file = File(configPath)
         file.parentFile?.mkdirs()
-        file.writeText(json.encodeToString(ManagerConfig.serializer(), config))
+        file.writeText(rawJson)
     }
 
     fun createDefault(): ManagerConfig {

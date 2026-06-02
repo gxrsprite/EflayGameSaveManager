@@ -35,27 +35,37 @@ class ArchiveService {
         workRoot: File
     ): File {
         workRoot.mkdirs()
+
+        // Pure Zip mode: if all valid units are Zip type, the "archive" is just the zip file itself.
+        val validUnits = game.saveUnits.filter { unit ->
+            val path = unit.path
+            path != null && (unit.unitType == SaveUnitType.Zip || pathExists(path))
+        }
+        val allZip = validUnits.isNotEmpty() && validUnits.all { it.unitType == SaveUnitType.Zip }
+
+        if (allZip) {
+            // Return the zip file directly — no staging, no repack
+            val zipPath = validUnits.first().path!!
+            val zipFile = File(zipPath)
+            if (!zipFile.exists()) throw IllegalStateException("Zip file not found: $zipPath")
+            return zipFile
+        }
+
         val stagingDir = File(workRoot, "content")
         stagingDir.mkdirs()
 
-        // Temp dir for Shizuku copies — cleaned up after archiving
         val shizukuTemp = File(workRoot, "shizuku-stage")
         var hasShizukuContent = false
 
-        val validUnits = game.saveUnits.filter { unit ->
-            val path = unit.path
-            path != null && pathExists(path)
-        }
+        val nonZipUnits = validUnits.filter { it.unitType != SaveUnitType.Zip }
+        val singleUnit = nonZipUnits.size == 1
 
-        val singleUnit = validUnits.size == 1
-
-        for (unit in validUnits) {
+        for (unit in nonZipUnits) {
             val path = unit.path!!
             val targetDir = if (singleUnit) stagingDir
                 else File(stagingDir, unit.id.toString()).also { it.mkdirs() }
 
             val sourcePath = if (isRestrictedPath(path) && ShizukuHelper.isAvailable()) {
-                // Stage restricted content into accessible temp via Shizuku
                 shizukuTemp.mkdirs()
                 val tempCopy = ShizukuHelper.copyFromRestricted(path, shizukuTemp)
                 if (tempCopy != null) {
@@ -80,7 +90,7 @@ class ArchiveService {
                 SaveUnitType.File -> {
                     sourceFile.copyTo(File(targetDir, sourceFile.name), overwrite = true)
                 }
-                SaveUnitType.WinRegistry -> {}
+                SaveUnitType.WinRegistry, SaveUnitType.Zip -> {}
             }
         }
 
@@ -91,7 +101,6 @@ class ArchiveService {
             addDirectoryToZip(zip, stagingDir, "")
         }
 
-        // Clean up Shizuku temp copies
         if (hasShizukuContent) {
             shizukuTemp.deleteRecursively()
         }
@@ -108,6 +117,17 @@ class ArchiveService {
         game: GameSnapshot,
         currentDevice: CurrentDeviceContext
     ) {
+        // Zip type: save the downloaded zip directly without extraction
+        val zipUnits = game.saveUnits.filter { it.unitType == SaveUnitType.Zip && it.path != null }
+        if (zipUnits.isNotEmpty()) {
+            for (unit in zipUnits) {
+                val targetFile = File(unit.path!!)
+                targetFile.parentFile?.mkdirs()
+                archivePath.copyTo(targetFile, overwrite = true)
+            }
+            return
+        }
+
         val extractRoot = File(archivePath.parentFile, "extract-${java.util.UUID.randomUUID()}")
         extractRoot.mkdirs()
 
@@ -162,7 +182,7 @@ class ArchiveService {
                         SaveUnitType.Folder -> {
                             copyDirectory(actualSource, stagingForRestore)
                         }
-                        SaveUnitType.WinRegistry -> continue
+                        SaveUnitType.WinRegistry, SaveUnitType.Zip -> continue
                     }
 
                     val success = ShizukuHelper.copyToRestricted(stagingForRestore, path)
@@ -177,7 +197,7 @@ class ArchiveService {
                         when (unit.unitType) {
                             SaveUnitType.File -> if (targetFile.exists()) targetFile.delete()
                             SaveUnitType.Folder -> if (targetFile.exists()) targetFile.deleteRecursively()
-                            SaveUnitType.WinRegistry -> {}
+                            SaveUnitType.WinRegistry, SaveUnitType.Zip -> {}
                         }
                     }
 
@@ -192,7 +212,7 @@ class ArchiveService {
                             val actualSource = resolveFolderContentRoot(sourceRoot, path)
                             copyDirectory(actualSource, File(path))
                         }
-                        SaveUnitType.WinRegistry -> {}
+                        SaveUnitType.WinRegistry, SaveUnitType.Zip -> {}
                     }
                 }
             }

@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using EflayGameSaveManager.Core.Models;
 using EflayGameSaveManager.Core.Serialization;
@@ -6,6 +7,11 @@ namespace EflayGameSaveManager.Core.Services;
 
 public sealed class GameSaveManagerConfigurationService
 {
+    private static readonly ManagerJsonSerializerContext SaveSerializerContext =
+        new(new JsonSerializerOptions(ManagerJsonSerializerContext.Default.Options)
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        });
     public const string ConfigFileName = "GameSaveManager.config.json";
 
     public string GetDefaultConfigPath(string? startDirectory = null)
@@ -80,7 +86,7 @@ public sealed class GameSaveManagerConfigurationService
         var tempPath = configPath + ".tmp";
         await using (var stream = File.Create(tempPath))
         {
-            await JsonSerializer.SerializeAsync(stream, config, ManagerJsonSerializerContext.Default.ManagerConfig, cancellationToken);
+            await JsonSerializer.SerializeAsync(stream, config, SaveSerializerContext.ManagerConfig, cancellationToken);
         }
 
         File.Move(tempPath, configPath, overwrite: true);

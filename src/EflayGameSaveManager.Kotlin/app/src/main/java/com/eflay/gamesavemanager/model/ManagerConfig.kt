@@ -28,14 +28,16 @@ data class SaveUnitDefinition(
     val id: Int = 0,
     val unit_type: SaveUnitType = SaveUnitType.Folder,
     val paths: Map<String, String> = emptyMap(),
-    val delete_before_apply: Boolean = false
+    val delete_before_apply: Boolean = false,
+    val linked_unit_ids: List<Int> = emptyList()
 )
 
 @Serializable
 enum class SaveUnitType {
     Folder,
     File,
-    WinRegistry
+    WinRegistry,
+    Zip
 }
 
 @Serializable

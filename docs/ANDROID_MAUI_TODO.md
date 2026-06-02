@@ -73,6 +73,12 @@ Android mounts storage at varying paths: `/storage/emulated/0/Android/data/`, `/
 
 **Fix**: `path.Contains("/Android/data/") || path.Contains("/Android/obb/")` catches all volumes.
 
+18. **Android restore should pull latest cloud backup for cross-device sync**
+
+For games like `DuskLight`, the Android device head can be older than a newer PC upload. Using the existing Core `RestoreGameCurrentSaveAsync()` restored Android's old head (`2026-05-29_22-04-18`) instead of the latest cloud backup (`2026-06-02_23-25-48` from PC), which looked like restore failed.
+
+**Fix**: Added Core `RestoreGameLatestSaveAsync()` and made the MAUI Android restore button call it. Button text now says `Restore latest`.
+
 ## Build & deploy
 
 ```bash

@@ -58,6 +58,9 @@ public sealed class SaveUnitDefinition
 
     [JsonPropertyName("delete_before_apply")]
     public bool DeleteBeforeApply { get; set; }
+
+    [JsonPropertyName("linked_unit_ids")]
+    public List<int> LinkedUnitIds { get; set; } = [];
 }
 
 public sealed class AppSettings

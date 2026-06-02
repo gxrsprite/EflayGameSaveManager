@@ -21,6 +21,8 @@ Native Kotlin / Jetpack Compose Android client, porting the MAUI version's save-
 - [x] Compose UI: header, add-game panel, favorites strip, all-games list, detail panel
 - [x] Shizuku integration for accessing restricted paths (`/Android/data/`, `/data/data/`)
 - [x] Shizuku status indicator in header (not installed / no permission / ADB / root)
+- [x] Pure Zip mode: `SaveUnitType.Zip`, `linked_unit_ids`, skip pack/unpack, upload/restore file picker
+- [x] Adaptive icon (mipmap-anydpi-v26 vector)
 
 ## Pitfalls & fixes
 
@@ -93,19 +95,23 @@ The official Shizuku-API README lists the dependency as `dev.rikka.shizuku:api:V
 
 The Shizuku API v13 deprecated `newProcess()` in favor of `UserService` (AIDL-based inter-process service) and made it `private`. Direct calls fail with `Cannot access 'static fun newProcess': it is private`.
 
-**Fix**: Use Java reflection to bypass the access restriction. `ShizukuHelper` calls `method.isAccessible = true` on the private `newProcess` method. The official alternative is `UserService`, which requires AIDL definitions and a separate service process — overkill for simple `cp`/`mkdir` shell commands.
+**Fix**: Use Java reflection to bypass the access restriction. `ShizukuHelper` calls `method.isAccessible = true` on the private `newProcess` method. The official alternative is `UserService`, which requires AIDL definitions and a separate service process.
 
 ### 12. Shizuku privilege levels: ADB (UID 2000) vs Root (UID 0)
 
-Shizuku started via wireless debugging (ADB) runs as UID 2000. This **cannot** access `/data/data/<other.app>/` — only root (UID 0, via Sui/Magisk) can. However, `/storage/emulated/0/Android/data/` and `/sdcard/Android/data/` **can** be accessed with ADB-level Shizuku.
-
-**Key takeaway**: For the primary use case (game saves under `/Android/data/`), ADB-level Shizuku is sufficient. For `/data/data/` access, Sui (Magisk module) is required. The app displays the privilege level in the header: "Shizuku: ready (ADB)" or "Shizuku: ready (root)".
+Shizuku started via wireless debugging (ADB) runs as UID 2000. This **cannot** access `/data/data/<other.app>/`. However, `/storage/emulated/0/Android/data/` and `/sdcard/Android/data/` **can** be accessed with ADB-level Shizuku.
 
 ### 13. IsRestrictedPath should cover all `/Android/data/` variants
 
-Different devices mount storage at different paths: `/storage/emulated/0/Android/data/`, `/sdcard/Android/data/`, `/storage/XXXX-XXXX/Android/data/` (SD cards). Using `startsWith` for each prefix is fragile.
+Different devices mount storage at different paths: `/storage/emulated/0/Android/data/`, `/sdcard/Android/data/`, `/storage/XXXX-XXXX/Android/data/` (SD cards).
 
-**Fix**: Use `path.contains("/Android/data/") || path.contains("/Android/obb/")` to catch all variants regardless of storage volume. Also covers `/data/data/` and `/data/user/` for app-private directories.
+**Fix**: Use `path.contains("/Android/data/") || path.contains("/Android/obb/")` to catch all variants.
+
+### 14. Restore should use latest cloud backup, not current Android head
+
+For cross-device sync, Android often restores a newer PC upload. `DuskLight` exposed this because Android's device head was `2026-05-29_22-04-18`, while the newest cloud backup was `2026-06-02_23-25-48` from PC. Restoring Android's own head looked like a failed restore.
+
+**Fix**: Kotlin `restoreCurrentSave()` now resolves the latest backup globally. UI/status copy says `Restore latest` / `latest cloud save`.
 
 ## Build & deploy
 
@@ -119,13 +125,36 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Build takes ~30s (incremental) to ~90s (clean). APK size ~17MB.
 
-## Next items
+## Next items — UI Rework
+
+### Navigation: ModalNavigationDrawer
+- [ ] Replace single-page ScrollView layout with `ModalNavigationDrawer` + top bar
+- [ ] Drawer slides from left, contains: Favorites, All Games, Config Editor
+- [ ] Hamburger icon in top bar to toggle drawer
+
+### Favorites tab
+- [ ] Read favorites from `GameSaveManager.config.json` → `favorites` array (instead of SharedPreferences)
+- [ ] Filter games by `favorites[].label` matching game `name`
+- [ ] Quick cloud sync actions per favorited game
+
+### All Games tab
+- [ ] Move current full game list here
+- [ ] Keep favorites star toggle (updates config `favorites` array)
+
+### Config Editor tab
+- [ ] `OutlinedTextField` showing raw `GameSaveManager.config.json` content
+- [ ] "Save" button → validate JSON → write to config file → reload
+- [ ] "Import" button → SAF file picker (`application/json`) → replace config → reload
+
+### Game Detail (shared across tabs)
+- [ ] Tapping a game shows detail panel (inline or bottom sheet)
+- [ ] Cloud status, upload, restore actions
+- [ ] Zip mode: upload file picker / restore save dialog
+
+## Next items — Backend
 
 - [ ] Replace deprecated `menuAnchor()` with typed overload
 - [ ] Add download-selected-backup support (not only restore-current)
 - [ ] Add conflict messaging when cloud head and local head differ
-- [ ] Add Switch emulator zip sync (direct upload of emulator-exported zip)
-- [ ] Upgrade AGP when version supporting compileSdk 36 is available
-- [ ] Remove debug logging (`Log.d` calls in S3CloudService / ViewModel) for release builds
-- [ ] Upgrade Shizuku from `newProcess` reflection to proper `UserService` (AIDL-based, avoids private API access)
-- [ ] Add Shizuku-based file browser for `/Android/data/` directory picker
+- [ ] Upgrade Shizuku from `newProcess` reflection to proper `UserService`
+- [ ] Remove debug logging for release builds

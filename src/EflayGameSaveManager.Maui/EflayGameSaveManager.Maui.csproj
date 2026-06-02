@@ -17,12 +17,15 @@
     <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
   <ItemGroup>
-    <MauiIcon Include="Resources\AppIcon\appicon.png" />
     <MauiXaml Update="**\*.xaml">
       <Generator>MSBuild:Compile</Generator>
     </MauiXaml>
-    <MauiAsset Include="..\..\GameSaveManager.config.json" LogicalName="GameSaveManager.config.json" />
+    <MauiAsset Include="GameSaveManager.config.json" LogicalName="GameSaveManager.config.json" />
     <MauiAsset Include="..\..\GameSaveManager.runtime.json" LogicalName="GameSaveManager.runtime.json" />
   </ItemGroup>
 

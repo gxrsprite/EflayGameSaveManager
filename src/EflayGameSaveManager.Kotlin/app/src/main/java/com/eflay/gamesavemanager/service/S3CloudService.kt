@@ -142,7 +142,7 @@ class S3CloudService {
     ): CloudDownloadResult = withContext(Dispatchers.IO) {
         val backups = tryLoadGameBackups(game.name, cloudSettings)
             ?: throw IllegalStateException("No cloud backups found for '${game.name}'.")
-        val currentBackup = resolveCurrentBackup(backups, currentDevice.deviceId)
+        val currentBackup = resolveLatestBackup(backups)
             ?: throw IllegalStateException("No cloud backups found for '${game.name}'.")
 
         val archiveKey = resolveArchiveKey(currentBackup, cloudSettings, game.name)
@@ -452,6 +452,10 @@ class S3CloudService {
             .maxByOrNull { it.Date }
         if (deviceBackup != null) return deviceBackup
 
+        return backups.Backups.maxByOrNull { it.Date }
+    }
+
+    private fun resolveLatestBackup(backups: LegacyGameBackups): LegacyBackupEntry? {
         return backups.Backups.maxByOrNull { it.Date }
     }
 

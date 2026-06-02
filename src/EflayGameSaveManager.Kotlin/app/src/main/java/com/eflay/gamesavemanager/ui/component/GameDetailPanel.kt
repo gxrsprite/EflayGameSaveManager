@@ -167,7 +167,7 @@ fun GameDetailPanel(
                     onClick = onRestoreCurrent,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Restore current")
+                    Text("Restore latest")
                 }
             }
 
