@@ -8,7 +8,7 @@ Native Kotlin / Jetpack Compose Android client, porting the MAUI version's save-
 - [x] Data models with `kotlinx.serialization` matching C# config schema
 - [x] S3-compatible cloud storage with AWS4-HMAC-SHA256 signing via OkHttp
 - [x] Archive create/restore matching C# `ArchiveTransferService` format (unit-id staging)
-- [x] Single-unit archive flattened to zip root (avoid `0/` wrapper directory)
+- [ ] Align archive upload with desktop basic RGSM v2 comment and unit-id layout for single-unit archives
 - [x] Config seeding from assets on first launch
 - [x] Runtime device ID resolution (`forced_device_name` from `GameSaveManager.runtime.json`)
 - [x] Favorites via SharedPreferences
@@ -58,11 +58,13 @@ AGP 8.7.3 was tested up to compileSdk 35. Using 36 triggers a build warning.
 
 The MAUI version had `IsBusy` guarding preventing inner calls. Kotlin version uses the same pattern: public methods call `runBusy { ... }`, while internal calls go through non-guarded `reloadCore()` / `refreshCloudCore()`. No deadlock.
 
-### 6. Single-unit archive wrapper directory (MAUI pitfall #13 — already handled)
+### 6. Desktop RGSM v2 archive layout
 
-C# `ArchiveTransferService` stages content under `{unitId}/` directories. Single-unit archives would produce an extra wrapper folder at the restore target.
+C# `ArchiveTransferService` now writes a basic RGSM v2 zip comment (`RGSM_ARCHIVE_V2` plus `{"version":2,"compression":"deflate"}`) and stages every non-Zip unit under `{unitId}/`, including single-unit archives.
 
-**Fix**: `ArchiveService.createCurrentDeviceArchive` now flattens single-unit archives (content goes directly in zip root). Multi-unit archives keep the `{unitId}/` structure. Restore side already handled both formats via `resolveSourceRoot()`.
+**Current Kotlin gap**: `ArchiveService.createCurrentDeviceArchive` may still flatten single-unit archives. Kotlin upload should be updated before claiming exact desktop archive-format parity.
+
+**Restore compatibility**: Kotlin restore should keep accepting old flat archives and same-named folder wrappers via `resolveSourceRoot()` / `resolveFolderContentRoot()`. Desktop restore also remains compatible with old flat or no-comment archives.
 
 ### 7. Duplicate same-type save units from PC/Android path split (MAUI pitfall #11 — already handled)
 
@@ -112,6 +114,12 @@ Different devices mount storage at different paths: `/storage/emulated/0/Android
 For cross-device sync, Android often restores a newer PC upload. `DuskLight` exposed this because Android's device head was `2026-05-29_22-04-18`, while the newest cloud backup was `2026-06-02_23-25-48` from PC. Restoring Android's own head looked like a failed restore.
 
 **Fix**: Kotlin `restoreCurrentSave()` now resolves the latest backup globally. UI/status copy says `Restore latest` / `latest cloud save`.
+
+### 15. Zip restore export should remove single numeric wrapper
+
+Cloud archives may contain `0/SAVEDATA/...` from RGSM save-unit staging. For mobile zip restore/export, users need `SAVEDATA/...`.
+
+**Fix**: Before writing a restored zip to the selected destination, Kotlin extracts it to temp, unwraps a single numeric root folder, and recompresses with fixed ordinary ZIP deflate.
 
 ## Build & deploy
 

@@ -103,8 +103,17 @@
                                 <Picker Title="Save unit type"
                                         ItemsSource="{Binding SaveUnitTypeOptions}"
                                         SelectedItem="{Binding SelectedSaveUnitType}" />
-                                <Entry Text="{Binding AddSavePath}" Placeholder="Save file path or save folder path" />
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                <Label IsVisible="{Binding IsZipSaveUnitTypeSelected}"
+                                       Text="Zip mode does not store a fixed Android path. Upload will ask for a zip file, and restore will ask where to save the restored zip."
+                                       FontSize="12"
+                                       TextColor="{StaticResource MutedTextColor}"
+                                       LineBreakMode="WordWrap" />
+                                <Entry Text="{Binding AddSavePath}"
+                                       Placeholder="Save file path or save folder path"
+                                       IsVisible="{Binding IsPathBasedSaveUnitTypeSelected}" />
+                                <Grid ColumnDefinitions="*,*"
+                                      ColumnSpacing="10"
+                                      IsVisible="{Binding IsPathBasedSaveUnitTypeSelected}">
                                     <Button Grid.Column="0" Text="Pick file" Command="{Binding PickSaveFileCommand}" />
                                     <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSaveFolderCommand}" />
                                 </Grid>
@@ -113,7 +122,7 @@
                                     <Button Grid.Column="0" Text="Create" Command="{Binding AddGameCommand}" />
                                     <Button Grid.Column="1" Text="Close" Command="{Binding ToggleAddGameCommand}" />
                                 </Grid>
-                                <Label Text="First Android pass keeps file and folder sync only. Switch emulator zip sync is tracked in docs/ANDROID_MAUI_TODO.md." FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
+                                <Label Text="Folder, file, and zip save units all follow the current sync design. Use zip mode for archive-style saves that should upload and restore as a .zip file." FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
                             </VerticalStackLayout>
                         </Border>
 

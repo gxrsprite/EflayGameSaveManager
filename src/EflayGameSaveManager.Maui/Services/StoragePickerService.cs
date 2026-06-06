@@ -5,6 +5,14 @@ namespace EflayGameSaveManager.Maui.Services;
 
 public sealed class StoragePickerService
 {
+    private static readonly FilePickerFileType ZipFileTypes = new(new Dictionary<DevicePlatform, IEnumerable<string>>
+    {
+        [DevicePlatform.Android] = ["application/zip", "application/x-zip-compressed", "*/*"],
+        [DevicePlatform.WinUI] = [".zip"],
+        [DevicePlatform.iOS] = ["public.zip-archive"],
+        [DevicePlatform.MacCatalyst] = ["public.zip-archive"]
+    });
+
     public async Task<StorageSelectionResult> PickFileAsync(CancellationToken cancellationToken = default)
     {
         var file = await FilePicker.Default.PickAsync(new PickOptions
@@ -27,6 +35,25 @@ public sealed class StoragePickerService
         return StorageSelectionResult.Success(path, message);
     }
 
+    public async Task<StorageSelectionResult> PickZipFileAsync(CancellationToken cancellationToken = default)
+    {
+        var file = await FilePicker.Default.PickAsync(new PickOptions
+        {
+            PickerTitle = "Select a zip file to sync",
+            FileTypes = ZipFileTypes
+        });
+
+        if (file is null)
+        {
+            return StorageSelectionResult.Cancelled("Zip selection cancelled.");
+        }
+
+        var path = await MaterializePickedFileAsync(file, cancellationToken);
+        var message = $"Zip selected: {path}";
+
+        return StorageSelectionResult.Success(path, message);
+    }
+
     public async Task<StorageSelectionResult> PickFolderAsync(CancellationToken cancellationToken = default)
     {
         var result = await FolderPicker.Default.PickAsync(cancellationToken);
@@ -41,6 +68,45 @@ public sealed class StoragePickerService
             : $"Folder selected: {path}";
 
         return StorageSelectionResult.Success(path, message);
+    }
+
+    public async Task<StorageSelectionResult> SaveFileAsync(
+        string suggestedFileName,
+        Stream sourceStream,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await FileSaver.Default.SaveAsync(
+            suggestedFileName,
+            sourceStream,
+            cancellationToken);
+
+        if (!result.IsSuccessful)
+        {
+            return StorageSelectionResult.Cancelled(result.Exception?.Message ?? "File save cancelled.");
+        }
+
+        return StorageSelectionResult.Success(
+            result.FilePath,
+            $"File saved: {result.FilePath}");
+    }
+
+    private static async Task<string> MaterializePickedFileAsync(FileResult file, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(file.FullPath) && File.Exists(file.FullPath))
+        {
+            return file.FullPath;
+        }
+
+        var extension = Path.GetExtension(file.FileName);
+        var tempFileName = $"{Guid.NewGuid():N}{extension}";
+        var tempPath = Path.Combine(FileSystem.CacheDirectory, "picked-files", tempFileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(tempPath)!);
+
+        await using var sourceStream = await file.OpenReadAsync();
+        await using var destinationStream = File.Create(tempPath);
+        await sourceStream.CopyToAsync(destinationStream, cancellationToken);
+        await destinationStream.FlushAsync(cancellationToken);
+        return tempPath;
     }
 }
 

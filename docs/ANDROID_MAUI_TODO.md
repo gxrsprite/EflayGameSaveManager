@@ -42,7 +42,7 @@ Current first-pass scope is file-save and folder-save cloud sync with a favorite
 
 12. **Old local config surviving reinstall**: the packaged `GameSaveManager.config.json` is copied only when the local file does not exist, so reinstalling a newer APK does not automatically replace a stale mobile config. Fix: `MobileWorkspaceService` now normalizes local config on startup instead of assuming reinstall will refresh the file.
 
-13. **Archive format leaked unit-id folders into restore target**: `ArchiveTransferService.CreateCurrentDeviceArchive()` stages content under `0/`, `1/`, etc. When a single-unit Android backup was restored, users could end up with an extra `1` directory in the target save folder. Fix: single-unit archives are now flattened so zip root contains save content directly; restore stays backward-compatible with old numeric wrapper directories.
+13. **Desktop RGSM v2 archive layout changed**: `ArchiveTransferService.CreateCurrentDeviceArchive()` now writes a basic RGSM v2 zip comment (`RGSM_ARCHIVE_V2` plus deflate metadata) and stages every non-Zip unit under `0/`, `1/`, etc. Single-unit desktop archives therefore use `0/SAVEDATA/...` for a `Folder` path ending in `SAVEDATA`. MAUI restore should keep accepting old flat archives and same-named folder wrappers, while MAUI upload should be checked before claiming exact desktop archive-format parity.
 
 ### Shizuku integration (MAUI-specific)
 
@@ -78,6 +78,24 @@ Android mounts storage at varying paths: `/storage/emulated/0/Android/data/`, `/
 For games like `DuskLight`, the Android device head can be older than a newer PC upload. Using the existing Core `RestoreGameCurrentSaveAsync()` restored Android's old head (`2026-05-29_22-04-18`) instead of the latest cloud backup (`2026-06-02_23-25-48` from PC), which looked like restore failed.
 
 **Fix**: Added Core `RestoreGameLatestSaveAsync()` and made the MAUI Android restore button call it. Button text now says `Restore latest`.
+
+19. **Zip restore export must unwrap single numeric unit folder**
+
+Switch/emulator zip restores may download RGSM archives shaped like `0/SAVEDATA/...`, but the user-facing restored zip must be `SAVEDATA/...`.
+
+**Fix**: Zip-unit restore now extracts to a temp directory, unwraps a single numeric root folder, then recompresses with fixed ordinary ZIP deflate before saving the zip.
+
+20. **Favorites rendering can hide a missing XAML resource until the first favorite is added**
+
+The favorites chip template in `MainPage.xaml` used `{StaticResource TextColor}`, but `App.xaml` did not define `TextColor`. Because the template was only realized once favorites existed, the crash looked like "tap Favorite -> app exits" instead of an obvious startup XAML failure.
+
+**Fix**: add `TextColor` to `App.xaml` resource dictionary so the favorites template resolves correctly on device.
+
+21. **MAUI Android does not like mutating a bound list during the same item-button click pipeline**
+
+The `Favorite` button lives inside the `CollectionView` item template, and toggling it also updates the separate `FavoriteGames` bound collection. Mutating that collection immediately inside the click command can make MAUI/Android tear down the page or bounce back to launcher without a useful managed exception.
+
+**Fix**: keep the update incremental, but defer the `FavoriteGames` add/remove by one UI tick with `await Task.Yield()` before mutating the bound collection.
 
 ## Build & deploy
 

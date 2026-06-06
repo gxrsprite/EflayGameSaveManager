@@ -34,52 +34,13 @@ public sealed class CloudSyncService
     {
         AppLogger.Info(
             $"Cloud upload-current start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
-        var rootKey = GetGameRootKey(cloudSettings, game.Name);
         var workRoot = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager", "upload", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workRoot);
 
         try
         {
             var archivePath = _archiveTransferService.CreateCurrentDeviceArchive(game, currentDevice, workRoot);
-            var timestamp = DateTimeOffset.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            var archiveKey = CloudStoragePathHelper.CombineKey(rootKey, $"{timestamp}.zip");
-            var saveDataRootKey = GetSaveDataRootKey(cloudSettings);
-            await _storageClient.UploadFileAsync(cloudSettings.Backend, archiveKey, archivePath, cancellationToken);
-
-            var backups = await LoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken);
-            var backupEntry = new LegacyBackupEntry(
-                timestamp,
-                string.Empty,
-                BuildBackupRelativePath(saveDataRootKey, game.Name, timestamp),
-                new FileInfo(archivePath).Length,
-                null,
-                currentDevice.DeviceId);
-
-            var updatedBackups = backups with
-            {
-                Backups = [.. backups.Backups.Where(item => !(item.Date == timestamp && item.DeviceId == currentDevice.DeviceId)), backupEntry],
-                DeviceHeads = new Dictionary<string, string>(backups.DeviceHeads, StringComparer.OrdinalIgnoreCase)
-                {
-                    [currentDevice.DeviceId] = timestamp
-                }
-            };
-
-            var manifestJson = JsonSerializer.Serialize(updatedBackups, CloudJsonSerializerContext.LegacyGameBackups);
-            await _storageClient.UploadUtf8JsonAsync(
-                cloudSettings.Backend,
-                CloudStoragePathHelper.CombineKey(rootKey, "Backups.json"),
-                manifestJson,
-                cancellationToken);
-
-            await UpdateSyncStateAsync(cloudSettings, currentDevice, game.Name, timestamp, cancellationToken);
-            AppLogger.Info(
-                $"Cloud upload-current completed: game={game.Name}, device={currentDevice.DeviceId}, archiveKey={archiveKey}, size={new FileInfo(archivePath).Length}, rootKey={rootKey}");
-
-            return new CloudUploadResult(
-                rootKey,
-                2,
-                new FileInfo(archivePath).Length + manifestJson.Length,
-                DateTimeOffset.UtcNow);
+            return await UploadGameCurrentSaveAsync(game, currentDevice, cloudSettings, archivePath, cancellationToken);
         }
         finally
         {
@@ -88,6 +49,62 @@ public sealed class CloudSyncService
                 Directory.Delete(workRoot, recursive: true);
             }
         }
+    }
+
+    public async Task<CloudUploadResult> UploadGameCurrentSaveAsync(
+        GameSnapshot game,
+        CurrentDeviceContext currentDevice,
+        CloudSettings cloudSettings,
+        string archivePath,
+        CancellationToken cancellationToken = default)
+    {
+        AppLogger.Info(
+            $"Cloud upload-current start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}, archivePath={archivePath}");
+        if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
+        {
+            throw new FileNotFoundException($"Archive file not found: {archivePath}");
+        }
+
+        var rootKey = GetGameRootKey(cloudSettings, game.Name);
+        var timestamp = DateTimeOffset.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        var archiveKey = CloudStoragePathHelper.CombineKey(rootKey, $"{timestamp}.zip");
+        var saveDataRootKey = GetSaveDataRootKey(cloudSettings);
+        await _storageClient.UploadFileAsync(cloudSettings.Backend, archiveKey, archivePath, cancellationToken);
+
+        var backups = await LoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken);
+        var backupEntry = new LegacyBackupEntry(
+            timestamp,
+            string.Empty,
+            BuildBackupRelativePath(saveDataRootKey, game.Name, timestamp),
+            new FileInfo(archivePath).Length,
+            null,
+            currentDevice.DeviceId);
+
+        var updatedBackups = backups with
+        {
+            Backups = [.. backups.Backups.Where(item => !(item.Date == timestamp && item.DeviceId == currentDevice.DeviceId)), backupEntry],
+            DeviceHeads = new Dictionary<string, string>(backups.DeviceHeads, StringComparer.OrdinalIgnoreCase)
+            {
+                [currentDevice.DeviceId] = timestamp
+            }
+        };
+
+        var manifestJson = JsonSerializer.Serialize(updatedBackups, CloudJsonSerializerContext.LegacyGameBackups);
+        await _storageClient.UploadUtf8JsonAsync(
+            cloudSettings.Backend,
+            CloudStoragePathHelper.CombineKey(rootKey, "Backups.json"),
+            manifestJson,
+            cancellationToken);
+
+        await UpdateSyncStateAsync(cloudSettings, currentDevice, game.Name, timestamp, cancellationToken);
+        AppLogger.Info(
+            $"Cloud upload-current completed: game={game.Name}, device={currentDevice.DeviceId}, archiveKey={archiveKey}, size={new FileInfo(archivePath).Length}, rootKey={rootKey}");
+
+        return new CloudUploadResult(
+            rootKey,
+            2,
+            new FileInfo(archivePath).Length + manifestJson.Length,
+            DateTimeOffset.UtcNow);
     }
 
     public async Task<GameCloudStatus> GetGameCurrentStatusAsync(

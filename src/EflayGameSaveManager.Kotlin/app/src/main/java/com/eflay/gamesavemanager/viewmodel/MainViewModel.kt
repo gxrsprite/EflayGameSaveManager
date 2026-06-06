@@ -538,18 +538,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     result.archivePath?.let { archivePath ->
                         val archiveFile = File(archivePath)
                         if (archiveFile.exists()) {
+                            val outputArchive = archiveService.normalizeZipArchiveForMobileRestore(archiveFile, workDir)
                             // Write the downloaded zip to the user-chosen URI
                             val uri = android.net.Uri.parse(zipSaveUri)
                             if (zipSaveUri.startsWith("content://")) {
                                 // Use ContentResolver for content URIs
                                 getApplication<Application>().contentResolver.openOutputStream(uri)?.use { out ->
-                                    archiveFile.inputStream().use { it.copyTo(out) }
+                                    outputArchive.inputStream().use { it.copyTo(out) }
                                 }
                             } else {
                                 // Use direct file I/O for real paths
                                 val targetFile = File(zipSaveUri)
                                 targetFile.parentFile?.mkdirs()
-                                archiveFile.copyTo(targetFile, overwrite = true)
+                                outputArchive.copyTo(targetFile, overwrite = true)
                             }
                         }
                     }

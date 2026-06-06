@@ -7,6 +7,7 @@ import com.eflay.gamesavemanager.model.SaveUnitType
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -221,12 +222,62 @@ class ArchiveService {
         }
     }
 
+    fun normalizeZipArchiveForMobileRestore(archivePath: File, workRoot: File): File {
+        val extractRoot = File(workRoot, "zip-normalize-${java.util.UUID.randomUUID()}")
+        extractRoot.mkdirs()
+
+        try {
+            extractZipSafely(archivePath, extractRoot)
+
+            val rootChildren = extractRoot.listFiles() ?: return archivePath
+            val rootFiles = rootChildren.filter { it.isFile }
+            val rootDirs = rootChildren.filter { it.isDirectory }
+            if (rootFiles.isNotEmpty() || rootDirs.size != 1 || rootDirs[0].name.toIntOrNull() == null) {
+                return archivePath
+            }
+
+            val normalizedArchive = File(workRoot, "mobile-restore-${java.util.UUID.randomUUID()}.zip")
+            ZipOutputStream(FileOutputStream(normalizedArchive)).use { zip ->
+                // Keep this fixed to ordinary ZIP deflate for mobile zip restore exports,
+                // regardless of future archive compression presets elsewhere.
+                zip.setLevel(Deflater.DEFAULT_COMPRESSION)
+                addDirectoryToZip(zip, rootDirs[0], "")
+            }
+            return normalizedArchive
+        } finally {
+            extractRoot.deleteRecursively()
+        }
+    }
+
     private fun pathExists(path: String): Boolean {
         if (isRestrictedPath(path) && ShizukuHelper.isAvailable()) {
             // Check via Shizuku — non-blocking check, if it fails we'll skip in staging
             return true // assume exists, Shizuku copy will handle actual errors
         }
         return File(path).exists()
+    }
+
+    private fun extractZipSafely(archivePath: File, extractRoot: File) {
+        val canonicalRoot = extractRoot.canonicalFile
+        ZipInputStream(FileInputStream(archivePath)).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                val targetFile = File(extractRoot, entry.name).canonicalFile
+                if (!targetFile.path.startsWith(canonicalRoot.path + File.separator)) {
+                    throw IllegalStateException("Unsafe zip entry path: ${entry.name}")
+                }
+
+                if (entry.isDirectory) {
+                    targetFile.mkdirs()
+                } else {
+                    targetFile.parentFile?.mkdirs()
+                    FileOutputStream(targetFile).use { output ->
+                        zip.copyTo(output)
+                    }
+                }
+                entry = zip.nextEntry
+            }
+        }
     }
 
     private fun resolveSourceRoot(extractRoot: File, unitId: Int, totalUnitCount: Int): File? {

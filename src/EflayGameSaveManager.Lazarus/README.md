@@ -15,6 +15,12 @@ Scope:
 - Opens game/save/config folders.
 - Starts the selected game executable.
 
+Archive layout:
+
+- Lazarus-created archives write a basic RGSM v2 zip comment: `RGSM_ARCHIVE_V2` plus JSON metadata using `compression:"deflate"`.
+- Non-zip save units are packed under their unit-id directory. `Folder` save units also include the selected folder itself, so a path ending in `SAVEDATA` is stored as `0/SAVEDATA/...` for save unit `0`.
+- Cloud restore remains compatible with older flat or no-comment archives and unwraps a single same-named folder to avoid restoring into `SAVEDATA/SAVEDATA/...`.
+
 Cloud restore extraction uses an external 7-Zip executable. Supported lookup order:
 
 - `7zz.exe` (recommended, standalone)

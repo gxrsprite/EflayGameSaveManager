@@ -7,7 +7,9 @@ namespace EflayGameSaveManager.Core.Services;
 
 public sealed class ArchiveTransferService
 {
+    private const string RgsmArchiveV2Comment = "RGSM_ARCHIVE_V2\n{\"version\":2,\"compression\":\"deflate\"}";
     private const string RegistryExportFileName = "registry.reg";
+    private static readonly byte[] EndOfCentralDirectorySignature = [0x50, 0x4b, 0x05, 0x06];
     private readonly WinRegistryTransferService _registryTransferService = new();
 
     public string CreateCurrentDeviceArchive(
@@ -36,8 +38,6 @@ public sealed class ArchiveTransferService
             return includedUnits[0].CurrentPath!.Path;
         }
 
-        var useFlatSingleUnitLayout = includedUnits.Length == 1;
-
         foreach (var item in includedUnits)
         {
             var saveUnit = item.SaveUnit;
@@ -46,9 +46,7 @@ public sealed class ArchiveTransferService
             if (saveUnit.UnitType == SaveUnitType.Zip)
                 continue;
 
-            var stagedPath = useFlatSingleUnitLayout
-                ? stagingDirectory
-                : Path.Combine(stagingDirectory, saveUnit.Id.ToString());
+            var stagedPath = Path.Combine(stagingDirectory, saveUnit.Id.ToString());
 
             if (saveUnit.UnitType == SaveUnitType.WinRegistry)
             {
@@ -61,7 +59,7 @@ public sealed class ArchiveTransferService
             }
             else
             {
-                CopyDirectory(currentPath.Path, stagedPath);
+                CopyDirectoryIncludingBaseDirectory(currentPath.Path, stagedPath);
             }
         }
 
@@ -72,6 +70,7 @@ public sealed class ArchiveTransferService
         }
 
         ZipFile.CreateFromDirectory(stagingDirectory, archivePath, CompressionLevel.Optimal, includeBaseDirectory: false);
+        WriteZipComment(archivePath, RgsmArchiveV2Comment);
         return archivePath;
     }
 
@@ -89,13 +88,27 @@ public sealed class ArchiveTransferService
 
         if (zipUnits.Length > 0)
         {
-            foreach (var item in zipUnits)
+            var zipWorkRoot = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager", "zip-restore", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(zipWorkRoot);
+            try
             {
-                var targetDir = Path.GetDirectoryName(item.Path!.Path);
-                if (!string.IsNullOrWhiteSpace(targetDir)) Directory.CreateDirectory(targetDir);
-                File.Copy(archivePath, item.Path.Path, overwrite: true);
-                AppLogger.Info($"Restore Zip unit {item.Unit.Id}: saved to {item.Path.Path}");
+                var normalizedArchivePath = NormalizeZipArchiveForMobileRestore(archivePath, zipWorkRoot);
+                foreach (var item in zipUnits)
+                {
+                    var targetDir = Path.GetDirectoryName(item.Path!.Path);
+                    if (!string.IsNullOrWhiteSpace(targetDir)) Directory.CreateDirectory(targetDir);
+                    File.Copy(normalizedArchivePath, item.Path.Path, overwrite: true);
+                    AppLogger.Info($"Restore Zip unit {item.Unit.Id}: saved to {item.Path.Path}");
+                }
             }
+            finally
+            {
+                if (Directory.Exists(zipWorkRoot))
+                {
+                    Directory.Delete(zipWorkRoot, recursive: true);
+                }
+            }
+
             return;
         }
 
@@ -283,5 +296,94 @@ public sealed class ArchiveTransferService
         {
             CopyDirectory(directory, Path.Combine(destinationDirectory, Path.GetFileName(directory)));
         }
+    }
+
+    private static void CopyDirectoryIncludingBaseDirectory(string sourceDirectory, string destinationParentDirectory)
+    {
+        var directoryName = Path.GetFileName(sourceDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(directoryName))
+        {
+            directoryName = new DirectoryInfo(sourceDirectory).Name;
+        }
+
+        CopyDirectory(sourceDirectory, Path.Combine(destinationParentDirectory, directoryName));
+    }
+
+    public string NormalizeZipArchiveForMobileRestore(string archivePath, string workingDirectory)
+    {
+        var extractRoot = Path.Combine(workingDirectory, "extract");
+        Directory.CreateDirectory(extractRoot);
+        ExtractArchive(archivePath, extractRoot);
+
+        var rootFiles = Directory.GetFiles(extractRoot);
+        var rootDirectories = Directory.GetDirectories(extractRoot);
+        if (rootFiles.Length > 0 ||
+            rootDirectories.Length != 1 ||
+            !IsNumericDirectoryName(rootDirectories[0]))
+        {
+            return archivePath;
+        }
+
+        var normalizedArchivePath = Path.Combine(workingDirectory, "mobile-restore.zip");
+        if (File.Exists(normalizedArchivePath))
+        {
+            File.Delete(normalizedArchivePath);
+        }
+
+        // Keep this fixed to ordinary ZIP deflate for mobile zip restore exports,
+        // regardless of future archive compression presets elsewhere.
+        ZipFile.CreateFromDirectory(
+            rootDirectories[0],
+            normalizedArchivePath,
+            CompressionLevel.Optimal,
+            includeBaseDirectory: false);
+        return normalizedArchivePath;
+    }
+
+    private static void WriteZipComment(string archivePath, string comment)
+    {
+        var commentBytes = System.Text.Encoding.UTF8.GetBytes(comment);
+        if (commentBytes.Length > ushort.MaxValue)
+        {
+            throw new InvalidOperationException("ZIP comment is too long.");
+        }
+
+        using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var endOfCentralDirectoryOffset = FindEndOfCentralDirectoryOffset(stream)
+            ?? throw new InvalidDataException($"ZIP end of central directory was not found: {archivePath}");
+
+        stream.Position = endOfCentralDirectoryOffset + 20;
+        stream.WriteByte((byte)(commentBytes.Length & 0xff));
+        stream.WriteByte((byte)(commentBytes.Length >> 8));
+        stream.SetLength(endOfCentralDirectoryOffset + 22 + commentBytes.Length);
+        stream.Position = endOfCentralDirectoryOffset + 22;
+        stream.Write(commentBytes, 0, commentBytes.Length);
+    }
+
+    private static long? FindEndOfCentralDirectoryOffset(FileStream stream)
+    {
+        const int minimumEndOfCentralDirectorySize = 22;
+        var searchLength = (int)Math.Min(stream.Length, minimumEndOfCentralDirectorySize + ushort.MaxValue);
+        if (searchLength < minimumEndOfCentralDirectorySize)
+        {
+            return null;
+        }
+
+        var buffer = new byte[searchLength];
+        stream.Position = stream.Length - searchLength;
+        stream.ReadExactly(buffer);
+
+        for (var index = searchLength - minimumEndOfCentralDirectorySize; index >= 0; index--)
+        {
+            if (buffer[index] == EndOfCentralDirectorySignature[0] &&
+                buffer[index + 1] == EndOfCentralDirectorySignature[1] &&
+                buffer[index + 2] == EndOfCentralDirectorySignature[2] &&
+                buffer[index + 3] == EndOfCentralDirectorySignature[3])
+            {
+                return stream.Length - searchLength + index;
+            }
+        }
+
+        return null;
     }
 }

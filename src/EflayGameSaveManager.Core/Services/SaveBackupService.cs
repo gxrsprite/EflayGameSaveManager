@@ -26,20 +26,20 @@ public sealed class SaveBackupService
 
                 if (saveUnit.UnitType == SaveUnitType.WinRegistry && _registryTransferService.KeyExists(path.Path))
                 {
-                    var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, $"unit-{saveUnit.Id}");
+                    var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, saveUnit.Id.ToString());
                     _registryTransferService.ExportKey(path.Path, Path.Combine(deviceDirectory, RegistryExportFileName));
                 }
                 else if (File.Exists(path.Path))
                 {
-                    var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, $"unit-{saveUnit.Id}");
+                    var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, saveUnit.Id.ToString());
                     Directory.CreateDirectory(deviceDirectory);
                     var destination = Path.Combine(deviceDirectory, Path.GetFileName(path.Path));
                     await CopyFileAsync(path.Path, destination, cancellationToken);
                 }
                 else if (Directory.Exists(path.Path))
                 {
-                    var destination = Path.Combine(targetDirectory, path.DeviceName, $"unit-{saveUnit.Id}");
-                    CopyDirectory(path.Path, destination);
+                    var destination = Path.Combine(targetDirectory, path.DeviceName, saveUnit.Id.ToString());
+                    CopyDirectoryIncludingBaseDirectory(path.Path, destination);
                 }
             }
         }
@@ -67,5 +67,16 @@ public sealed class SaveBackupService
         {
             CopyDirectory(directory, Path.Combine(destinationDirectory, Path.GetFileName(directory)));
         }
+    }
+
+    private static void CopyDirectoryIncludingBaseDirectory(string sourceDirectory, string destinationParentDirectory)
+    {
+        var directoryName = Path.GetFileName(sourceDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(directoryName))
+        {
+            directoryName = new DirectoryInfo(sourceDirectory).Name;
+        }
+
+        CopyDirectory(sourceDirectory, Path.Combine(destinationParentDirectory, directoryName));
     }
 }

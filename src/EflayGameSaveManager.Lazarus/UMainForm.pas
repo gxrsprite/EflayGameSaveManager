@@ -95,6 +95,8 @@ type
     function CreateCurrentDeviceArchive(const WorkRoot: string): string;
     procedure StageSaveUnit(const SourcePath, StagedPath, UnitType: string);
     procedure AddDirectoryToZip(Zipper: TZipper; const RootDir, SourceDir: string);
+    procedure WriteZipComment(const ArchivePath, Comment: string);
+    function FindEndOfCentralDirectoryOffset(Stream: TFileStream): Int64;
     function ResolveCurrentCloudBackup(const Backups: TJSONArray; const DeviceHeads: TJSONObject): TJSONObject;
     function ResolveArchiveKey(const CloudSettings: TJSONObject; const Backup: TJSONObject): string;
     function ResolveExtractedUnitRoot(const ExtractRoot: string; UnitId, UnitCount: Integer): string;
@@ -115,6 +117,9 @@ const
   ConfigFileName = 'GameSaveManager.config.json';
   LiteConfigFileName = 'GameSaveManagerLite.config.json';
   RuntimeFileName = 'GameSaveManager.runtime.json';
+  RgsmArchiveV2Comment = 'RGSM_ARCHIVE_V2'#10'{"version":2,"compression":"deflate"}';
+  EndOfCentralDirectoryMinSize = 22;
+  MaxZipCommentLength = 65535;
 
 constructor TMainForm.Create(TheOwner: TComponent);
 begin
@@ -534,7 +539,7 @@ begin
     if SourcePath = '' then
       Continue;
 
-    UnitTarget := IncludeTrailingPathDelimiter(TargetRoot) + 'unit-' + IntToStr(SaveUnit.Get('id', I));
+    UnitTarget := IncludeTrailingPathDelimiter(TargetRoot) + IntToStr(SaveUnit.Get('id', I));
     CopyPathToBackup(SourcePath, UnitTarget);
   end;
 
@@ -1152,7 +1157,8 @@ begin
     CopyFileToBackup(SourcePath, IncludeTrailingPathDelimiter(DestinationPath) + ExtractFileName(SourcePath));
   end
   else if DirectoryExists(SourcePath) then
-    CopyDirectoryToBackup(SourcePath, DestinationPath)
+    CopyDirectoryToBackup(SourcePath,
+      IncludeTrailingPathDelimiter(DestinationPath) + ExtractFileName(ExcludeTrailingPathDelimiter(SourcePath)))
   else
     SetStatus('Save path not found, skipped: ' + SourcePath);
 end;
@@ -1908,6 +1914,8 @@ begin
   finally
     Zipper.Free;
   end;
+
+  WriteZipComment(Result, RgsmArchiveV2Comment);
 end;
 
 procedure TMainForm.StageSaveUnit(const SourcePath, StagedPath, UnitType: string);
@@ -1920,7 +1928,7 @@ begin
     CopyFileToBackup(SourcePath, IncludeTrailingPathDelimiter(StagedPath) + ExtractFileName(SourcePath));
   end
   else
-    CopyDirectoryToBackup(SourcePath, StagedPath);
+    CopyDirectoryToBackup(SourcePath, IncludeTrailingPathDelimiter(StagedPath) + ExtractFileName(ExcludeTrailingPathDelimiter(SourcePath)));
 end;
 
 procedure TMainForm.AddDirectoryToZip(Zipper: TZipper; const RootDir, SourceDir: string);
@@ -1944,6 +1952,66 @@ begin
     until FindNext(Search) <> 0;
   finally
     FindClose(Search);
+  end;
+end;
+
+procedure TMainForm.WriteZipComment(const ArchivePath, Comment: string);
+var
+  Stream: TFileStream;
+  CommentBytes: RawByteString;
+  CommentLength: Word;
+  EocdOffset: Int64;
+begin
+  CommentBytes := RawByteString(Comment);
+  if Length(CommentBytes) > MaxZipCommentLength then
+    raise Exception.Create('Zip comment is too long.');
+
+  Stream := TFileStream.Create(ArchivePath, fmOpenReadWrite or fmShareDenyWrite);
+  try
+    EocdOffset := FindEndOfCentralDirectoryOffset(Stream);
+    if EocdOffset < 0 then
+      raise Exception.Create('Zip end-of-central-directory record was not found.');
+
+    CommentLength := Length(CommentBytes);
+    Stream.Position := EocdOffset + 20;
+    Stream.WriteBuffer(CommentLength, SizeOf(CommentLength));
+    Stream.Size := EocdOffset + EndOfCentralDirectoryMinSize;
+    if CommentLength > 0 then
+      Stream.WriteBuffer(CommentBytes[1], CommentLength);
+  finally
+    Stream.Free;
+  end;
+end;
+
+function TMainForm.FindEndOfCentralDirectoryOffset(Stream: TFileStream): Int64;
+var
+  Buffer: array of Byte;
+  BytesToRead: Integer;
+  I: Integer;
+begin
+  Result := -1;
+  if Stream.Size > EndOfCentralDirectoryMinSize + MaxZipCommentLength then
+    BytesToRead := EndOfCentralDirectoryMinSize + MaxZipCommentLength
+  else
+    BytesToRead := Integer(Stream.Size);
+
+  if BytesToRead < EndOfCentralDirectoryMinSize then
+    Exit;
+
+  SetLength(Buffer, BytesToRead);
+  Stream.Position := Stream.Size - BytesToRead;
+  Stream.ReadBuffer(Buffer[0], BytesToRead);
+
+  for I := Length(Buffer) - EndOfCentralDirectoryMinSize downto 0 do
+  begin
+    if (Buffer[I] = $50) and
+       (Buffer[I + 1] = $4B) and
+       (Buffer[I + 2] = $05) and
+       (Buffer[I + 3] = $06) then
+    begin
+      Result := Stream.Size - BytesToRead + I;
+      Exit;
+    end;
   end;
 end;
 

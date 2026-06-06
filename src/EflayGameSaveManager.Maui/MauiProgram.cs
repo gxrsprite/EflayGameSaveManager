@@ -19,10 +19,11 @@ public static class MauiProgram
             new EnvironmentTokenResolver(),
             new CurrentDeviceService(),
             new AppRuntimeSettingsService()));
+        builder.Services.AddSingleton<ArchiveTransferService>();
         builder.Services.AddSingleton(sp => new CloudSyncService(
             new S3CompatibleCloudStorageClient(),
             new SaveBackupService(),
-            new ArchiveTransferService()));
+            sp.GetRequiredService<ArchiveTransferService>()));
         builder.Services.AddSingleton<MobileWorkspaceService>();
         builder.Services.AddSingleton<FavoriteGamesService>();
         builder.Services.AddSingleton<StoragePickerService>();
