@@ -38,13 +38,23 @@ public sealed class AvaloniaPathPickerService : IPathPickerService
 
     public async Task<string?> PickSavePathAsync(SaveUnitType unitType, string currentPath)
     {
-        if (unitType == SaveUnitType.File)
+        if (unitType is SaveUnitType.File or SaveUnitType.Zip)
         {
             var files = await _owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Select Save File",
+                Title = unitType == SaveUnitType.Zip ? "Select Save Zip" : "Select Save File",
                 AllowMultiple = false,
-                SuggestedStartLocation = await GetSuggestedStartLocationAsync(currentPath)
+                SuggestedStartLocation = await GetSuggestedStartLocationAsync(currentPath),
+                FileTypeFilter = unitType == SaveUnitType.Zip
+                    ?
+                    [
+                        new FilePickerFileType("Zip files")
+                        {
+                            Patterns = ["*.zip"]
+                        },
+                        FilePickerFileTypes.All
+                    ]
+                    : null
             });
 
             return files.Count == 0 ? null : files[0].Path.LocalPath;

@@ -107,7 +107,7 @@ dotnet build -c Debug -f net10.0-android -p:JavaSdkDirectory="$JAVA_HOME"
 adb install -r bin/Debug/net10.0-android/com.eflay.gamesavemanager.maui-Signed.apk
 ```
 
-Build takes ~3-4 min (aapt2 + d8 + signing). The `SharpCompress` NU1902 warning is a known advisory, pending package update.
+Build takes ~3-4 min (aapt2 + d8 + signing).
 
 ## Next items
 

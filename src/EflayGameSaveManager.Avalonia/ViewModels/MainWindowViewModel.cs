@@ -68,6 +68,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isAddGameView;
 
     [ObservableProperty]
+    private bool _isSettingsView;
+
+    [ObservableProperty]
     private string _selectedGameName = "Select a game";
 
     [ObservableProperty]
@@ -108,6 +111,36 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _addGamePath = string.Empty;
+
+    [ObservableProperty]
+    private string _s3RootPath = string.Empty;
+
+    [ObservableProperty]
+    private string _s3Endpoint = string.Empty;
+
+    [ObservableProperty]
+    private string _s3Bucket = string.Empty;
+
+    [ObservableProperty]
+    private string _s3Region = string.Empty;
+
+    [ObservableProperty]
+    private string _s3AccessKeyId = string.Empty;
+
+    [ObservableProperty]
+    private string _s3SecretAccessKey = string.Empty;
+
+    [ObservableProperty]
+    private string _s3MaxConcurrency = "1";
+
+    [ObservableProperty]
+    private string _s3AutoSyncInterval = "0";
+
+    [ObservableProperty]
+    private bool _s3AlwaysSync;
+
+    [ObservableProperty]
+    private string _s3SettingsSummary = "Cloud backend is not configured.";
 
     public string AddGameTokenHelp =>
         string.Join(
@@ -181,6 +214,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         IsGameListView = true;
         IsAddGameView = false;
+        IsSettingsView = false;
     }
 
     [RelayCommand]
@@ -188,10 +222,19 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         IsGameListView = false;
         IsAddGameView = true;
+        IsSettingsView = false;
         if (AddGameSaveUnits.Count == 0)
         {
             AddSaveUnitForNewGame(SaveUnitType.Folder);
         }
+    }
+
+    [RelayCommand]
+    private void ShowSettings()
+    {
+        IsGameListView = false;
+        IsAddGameView = false;
+        IsSettingsView = true;
     }
 
     [RelayCommand]
@@ -346,6 +389,12 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void AddZipSaveUnit()
+    {
+        AddSaveUnitForNewGame(SaveUnitType.Zip);
+    }
+
+    [RelayCommand]
     private async Task CreateGameAsync()
     {
         if (_currentConfig is null || _currentSnapshot is null)
@@ -419,6 +468,58 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ResetAddGame()
     {
         ResetAddGameForm();
+    }
+
+    [RelayCommand]
+    private async Task SaveS3SettingsAsync()
+    {
+        if (_currentConfig is null || _currentSnapshot is null)
+        {
+            StatusMessage = "Configuration is not loaded yet.";
+            return;
+        }
+
+        if (!int.TryParse(S3MaxConcurrency.Trim(), out var maxConcurrency) || maxConcurrency < 1)
+        {
+            StatusMessage = "S3 max concurrency must be a positive integer.";
+            return;
+        }
+
+        if (!int.TryParse(S3AutoSyncInterval.Trim(), out var autoSyncInterval) || autoSyncInterval < 0)
+        {
+            StatusMessage = "S3 auto sync interval must be 0 or a positive integer.";
+            return;
+        }
+
+        await RunBusyAsync(
+            "Saving S3 settings...",
+            async () =>
+            {
+                _currentConfig.Settings.CloudSettings = new CloudSettings
+                {
+                    RootPath = S3RootPath.Trim(),
+                    AlwaysSync = S3AlwaysSync,
+                    AutoSyncInterval = autoSyncInterval,
+                    MaxConcurrency = maxConcurrency,
+                    Backend = new CloudBackendSettings
+                    {
+                        Type = "S3",
+                        Endpoint = S3Endpoint.Trim(),
+                        Bucket = S3Bucket.Trim(),
+                        Region = S3Region.Trim(),
+                        AccessKeyId = S3AccessKeyId.Trim(),
+                        SecretAccessKey = S3SecretAccessKey.Trim()
+                    }
+                };
+
+                await _configurationService.SaveAsync(_currentSnapshot.ConfigPath, _currentConfig);
+                var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath);
+                ApplySnapshot(_currentConfig, refreshedSnapshot, SelectedGame?.Name);
+                ShowSettings();
+                StatusMessage = IsCloudConfigured(_currentConfig.Settings.CloudSettings)
+                    ? "S3 settings saved."
+                    : "S3 settings saved, but required fields are still incomplete.";
+            });
     }
 
     [RelayCommand]
@@ -763,6 +864,7 @@ public partial class MainWindowViewModel : ViewModelBase
         CloudSummary = CloudEnabled
             ? $"Cloud target: {config.Settings.CloudSettings.Backend.Bucket}/{CloudStoragePathHelper.NormalizeRootPath(config.Settings.CloudSettings.RootPath)}"
             : "Cloud backend is not configured.";
+        ApplyCloudSettingsToForm(config.Settings.CloudSettings);
 
         Games.Clear();
         foreach (var game in snapshot.Games)
@@ -1026,6 +1128,22 @@ public partial class MainWindowViewModel : ViewModelBase
                !string.IsNullOrWhiteSpace(cloudSettings.Backend.AccessKeyId) &&
                !string.IsNullOrWhiteSpace(cloudSettings.Backend.SecretAccessKey);
     }
+
+    private void ApplyCloudSettingsToForm(CloudSettings cloudSettings)
+    {
+        S3RootPath = cloudSettings.RootPath;
+        S3Endpoint = cloudSettings.Backend.Endpoint;
+        S3Bucket = cloudSettings.Backend.Bucket;
+        S3Region = cloudSettings.Backend.Region;
+        S3AccessKeyId = cloudSettings.Backend.AccessKeyId;
+        S3SecretAccessKey = cloudSettings.Backend.SecretAccessKey;
+        S3MaxConcurrency = cloudSettings.MaxConcurrency <= 0 ? "1" : cloudSettings.MaxConcurrency.ToString();
+        S3AutoSyncInterval = cloudSettings.AutoSyncInterval < 0 ? "0" : cloudSettings.AutoSyncInterval.ToString();
+        S3AlwaysSync = cloudSettings.AlwaysSync;
+        S3SettingsSummary = IsCloudConfigured(cloudSettings)
+            ? $"S3 target: {cloudSettings.Backend.Bucket}/{CloudStoragePathHelper.NormalizeRootPath(cloudSettings.RootPath)}"
+            : "S3 backend is not fully configured.";
+    }
 }
 
 public sealed partial class GameListItemViewModel : ObservableObject
@@ -1093,6 +1211,7 @@ public sealed partial class AddGameSaveUnitEditorViewModel : ObservableObject
     public string PathWatermark => UnitType switch
     {
         SaveUnitType.WinRegistry => @"HKEY_CURRENT_USER\Software\GameName",
+        SaveUnitType.Zip => @"<home>\Downloads\GameSave.zip",
         SaveUnitType.File => @"<winLocalAppData>\GameName\save.dat",
         _ => @"<home>\Saved Games\GameName"
     };

@@ -18,6 +18,12 @@ Shared business logic.
 
 Most UI projects should reuse this project instead of duplicating save/archive/cloud behavior.
 
+Archive layout note:
+
+- Desktop archives created by Core/Avalonia write a basic RGSM v2 zip comment: `RGSM_ARCHIVE_V2` plus JSON metadata using `compression:"deflate"`.
+- Non-zip save units are packed under their stable unit-id directory. `Folder` save units also include the selected folder itself, so a path ending in `SAVEDATA` is stored as `0/SAVEDATA/...` for save unit `0`.
+- Restore remains backward-compatible with older flat or no-comment archives and automatically unwraps a single same-named folder, so restoring `SAVEDATA/...` or `0/SAVEDATA/...` to a target `SAVEDATA` path does not create `SAVEDATA/SAVEDATA/...`.
+
 ### `EflayGameSaveManager.Avalonia`
 
 Main and recommended desktop UI built with Avalonia.
@@ -26,8 +32,9 @@ Main and recommended desktop UI built with Avalonia.
 - Can start without an existing `GameSaveManager.config.json`; adding a game writes a new config file.
 - Lists games, save units, current-device paths, executable paths, cloud status, and cloud backup history.
 - Adds new games from the UI.
-- Supports folder saves, file saves, and Windows registry saves (`WinRegistry`).
+- Supports folder saves, file saves, zip saves (`Zip`), and Windows registry saves (`WinRegistry`).
 - Lets users select file/folder paths or edit paths manually, including token paths such as `<home>` and `<winLocalAppData>`.
+- Provides a Settings page for editing the S3-compatible cloud backend.
 - Creates local backups (zip archives with `Backups.json` manifests).
 - Lists local backups with device name, size, and date; restores or deletes selected local backups.
 - Uploads current saves to S3-compatible cloud storage.
@@ -136,9 +143,6 @@ dotnet build src\EflayGameSaveManager.Maui\EflayGameSaveManager.Maui.csproj -c D
 adb install -r bin\Debug\net10.0-android\com.eflay.gamesavemanager.maui-Signed.apk
 ```
 
-踩坑记录和待办：
-- [`docs/ANDROID_MAUI_TODO.md`](docs/ANDROID_MAUI_TODO.md)
-
 ### `EflayGameSaveManager.Kotlin`
 
 原生 Kotlin / Jetpack Compose Android 客户端，独立实现不依赖 Core。
@@ -163,9 +167,6 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 APK ~17MB，增量编译 ~30s。用 Android Studio 打开 `src/EflayGameSaveManager.Kotlin` 目录即可 IDE 开发。
-
-踩坑记录和待办：
-- [`docs/ANDROID_KOTLIN_TODO.md`](docs/ANDROID_KOTLIN_TODO.md)
 
 ### `EflayGameSaveManager.MewUI`
 
@@ -203,9 +204,20 @@ The app expects these files near the working directory or a parent directory:
 - `GameSaveManager.runtime.json`: local runtime settings, currently used for `forced_device_name`.
 - `GameSaveManagerLite.config.json` (Lazarus optional): Lite-only overrides such as `settings.forced_device_name` and `settings.seven_zip_dir`.
 
-Save units support `Folder`, `File`, and Windows registry keys via `WinRegistry`.
+Save units support `Folder`, `File`, `Zip`, and Windows registry keys via `WinRegistry`.
 
 The cloud backend is configured under `settings.cloud_settings` in `GameSaveManager.config.json`.
+The Avalonia app can edit the S3 endpoint, bucket, region, root path, access key, secret key, and sync options from `Settings`.
+
+## Zip Mode
+
+Use `Zip` save units when the complete save state already exists as a single `.zip` file.
+
+- Add a save unit with `unit_type` set to `Zip`.
+- Set the current-device path to the `.zip` file.
+- Local backup and cloud upload copy that zip directly instead of repacking its contents.
+- Restore writes the downloaded or selected backup zip back to the configured zip path.
+- Prefer keeping a Zip-mode game to Zip units only; mixing Zip with `Folder`, `File`, or `WinRegistry` units should be reserved for compatibility cases.
 
 The configuration file format is based on the upstream [`mcthesw/game-save-manager`](https://github.com/mcthesw/game-save-manager) project.
 
@@ -251,6 +263,11 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 - 创建本地存档压缩包
 - 通过 S3 兼容存储进行上传、列表、下载、恢复、删除
 
+归档格式说明：
+- Core/Avalonia 创建的桌面压缩包会写入基础 RGSM v2 zip comment：`RGSM_ARCHIVE_V2` 加 JSON 元数据，压缩方式标记为 `compression:"deflate"`。
+- 非 Zip 存档单元都会先使用稳定的 unit id 目录；`Folder` 存档单元还会保留所选文件夹本身。例如 unit `0` 的路径末尾是 `SAVEDATA` 时，zip 内保存为 `0/SAVEDATA/...`。
+- 恢复时继续兼容旧的扁平布局或无 comment 压缩包，并会自动拆掉一层同名目录，避免把 `SAVEDATA/...` 或 `0/SAVEDATA/...` 恢复成 `SAVEDATA/SAVEDATA/...`。
+
 ### `EflayGameSaveManager.Avalonia`
 
 主力 .NET 桌面版（推荐优先使用）。
@@ -259,8 +276,9 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 - 无需预先存在 `GameSaveManager.config.json`，首次添加游戏后会自动生成配置文件
 - 查看游戏列表、当前设备、存档路径、游戏路径、云状态和云备份历史
 - 在界面中添加新游戏
-- 支持文件夹存档、单文件存档、Windows 注册表存档（`WinRegistry`）
+- 支持文件夹存档、单文件存档、zip 存档（`Zip`）、Windows 注册表存档（`WinRegistry`）
 - 路径可通过选择器选择，也可以手动编辑并使用 `<home>`、`<winLocalAppData>` 等 token
+- 提供 Settings 页面，可在界面中配置 S3 兼容云存储
 - 创建本地备份（zip 压缩包 + Backups.json 清单）
 - 查看本地备份列表（显示设备名、大小、日期），恢复或删除选中的本地备份
 - 上传当前存档到 S3 兼容云存储
@@ -306,10 +324,6 @@ cd src/EflayGameSaveManager.Kotlin && ./gradlew assembleDebug
 ```
 
 APK ~17MB，Android Studio 直接打开 `src/EflayGameSaveManager.Kotlin` 即可开发。
-
-踩坑文档：
-- [`docs/ANDROID_MAUI_TODO.md`](docs/ANDROID_MAUI_TODO.md)
-- [`docs/ANDROID_KOTLIN_TODO.md`](docs/ANDROID_KOTLIN_TODO.md)
 
 ### `EflayGameSaveManager.MewUI`
 
@@ -376,7 +390,19 @@ Lite 独立配置文件：
 - `GameSaveManager.runtime.json`：运行时设置（如 `forced_device_name`）
 - `GameSaveManagerLite.config.json`（Lazarus 可选）：Lite 专用覆盖项（`forced_device_name`、`seven_zip_dir`）
 
-存档单元支持 `Folder`、`File`，以及用 `WinRegistry` 表示的 Windows 注册表键。
+存档单元支持 `Folder`、`File`、`Zip`，以及用 `WinRegistry` 表示的 Windows 注册表键。
+
+云端后端配置位于 `GameSaveManager.config.json` 的 `settings.cloud_settings`。Avalonia 版本可以在 `Settings` 页面配置 S3 endpoint、bucket、region、root path、access key、secret key 和同步选项。
+
+## Zip 模式
+
+当游戏、模拟器、Android 客户端或外部工具已经把完整存档保存成单个 `.zip` 文件时，使用 `Zip` 存档单元。
+
+- 新增或编辑存档单元时，将 `unit_type` 设置为 `Zip`。
+- 当前设备路径填写对应的 `.zip` 文件路径。
+- 本地备份和云端上传会直接复制这个 zip 文件，不再重新打包内部内容。
+- 恢复时会把下载或选中的备份 zip 写回到配置的 zip 路径。
+- 建议 Zip 模式的游戏只使用 Zip 存档单元；只有兼容旧配置时再混用 `Folder`、`File` 或 `WinRegistry`。
 
 面向 AI 编程助手和后续维护者的实现说明见 [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md)。
 

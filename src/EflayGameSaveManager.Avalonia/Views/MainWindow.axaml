@@ -69,12 +69,15 @@
         <Grid Grid.Row="1" ColumnDefinitions="320,*" ColumnSpacing="18" Margin="0,18,0,0">
             <Border Background="#FFFFFF" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="18" Padding="14">
                 <Grid RowDefinitions="Auto,*">
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
                         <Button Content="Games"
                                 Command="{Binding ShowGameListCommand}" />
                         <Button Grid.Column="1"
                                 Content="Add Game"
                                 Command="{Binding ShowAddGameCommand}" />
+                        <Button Grid.Column="2"
+                                Content="Settings"
+                                Command="{Binding ShowSettingsCommand}" />
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="0,12,0,0">
@@ -108,6 +111,8 @@
                                     Command="{Binding AddFileSaveUnitCommand}" />
                             <Button Content="Add Registry Save"
                                     Command="{Binding AddRegistrySaveUnitCommand}" />
+                            <Button Content="Add Zip Save"
+                                    Command="{Binding AddZipSaveUnitCommand}" />
                             <Button Content="Reset Form"
                                     Command="{Binding ResetAddGameCommand}" />
                         </StackPanel>
@@ -351,7 +356,7 @@
 
                         <Border Background="#FFFDF5" BorderBrush="#E8D9A8" BorderThickness="1" CornerRadius="12" Padding="12">
                             <StackPanel Spacing="10">
-                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                                     <TextBlock Text="{Binding AddGameSaveUnits.Count, StringFormat=Save Units: {0}}"
                                                FontWeight="SemiBold"
                                                Foreground="#1B2A3A"/>
@@ -364,8 +369,12 @@
                                             Content="File"
                                             Command="{Binding AddFileSaveUnitCommand}" />
                                     <Button Grid.Column="3"
+                                            Margin="0,0,8,0"
                                             Content="Registry"
                                             Command="{Binding AddRegistrySaveUnitCommand}" />
+                                    <Button Grid.Column="4"
+                                            Content="Zip"
+                                            Command="{Binding AddZipSaveUnitCommand}" />
                                 </Grid>
 
                                 <ItemsControl ItemsSource="{Binding AddGameSaveUnits}">
@@ -410,6 +419,95 @@
                             <Button Content="Reset"
                                     MinWidth="100"
                                     Command="{Binding ResetAddGameCommand}" />
+                            <Button Content="Back To Games"
+                                    MinWidth="130"
+                                    Command="{Binding ShowGameListCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+                <ScrollViewer IsVisible="{Binding IsSettingsView}"
+                              VerticalScrollBarVisibility="Visible"
+                              HorizontalScrollBarVisibility="Disabled"
+                              AllowAutoHide="False">
+                    <StackPanel Spacing="16">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Settings" FontSize="24" FontWeight="Bold" Foreground="#1B2A3A"/>
+                            <TextBlock Text="{Binding S3SettingsSummary}" Foreground="#5F7288" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="S3 Storage" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+                                      ColumnDefinitions="180,*"
+                                      RowSpacing="10"
+                                      ColumnSpacing="12">
+                                    <TextBlock Text="Endpoint" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding S3Endpoint}"
+                                             Watermark="https://s3.example.com"/>
+
+                                    <TextBlock Grid.Row="1" Text="Bucket" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <TextBox Grid.Row="1"
+                                             Grid.Column="1"
+                                             Text="{Binding S3Bucket}"
+                                             Watermark="game-saves"/>
+
+                                    <TextBlock Grid.Row="2" Text="Region" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <TextBox Grid.Row="2"
+                                             Grid.Column="1"
+                                             Text="{Binding S3Region}"
+                                             Watermark="auto"/>
+
+                                    <TextBlock Grid.Row="3" Text="Root Path" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <TextBox Grid.Row="3"
+                                             Grid.Column="1"
+                                             Text="{Binding S3RootPath}"
+                                             Watermark="GameSaveManager"/>
+
+                                    <TextBlock Grid.Row="4" Text="Access Key ID" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <TextBox Grid.Row="4"
+                                             Grid.Column="1"
+                                             Text="{Binding S3AccessKeyId}"/>
+
+                                    <TextBlock Grid.Row="5" Text="Secret Access Key" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <TextBox Grid.Row="5"
+                                             Grid.Column="1"
+                                             Text="{Binding S3SecretAccessKey}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Sync Options" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                <Grid RowDefinitions="Auto,Auto,Auto"
+                                      ColumnDefinitions="180,*"
+                                      RowSpacing="10"
+                                      ColumnSpacing="12">
+                                    <TextBlock Text="Max Concurrency" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding S3MaxConcurrency}"
+                                             Watermark="1"/>
+
+                                    <TextBlock Grid.Row="1" Text="Auto Sync Interval" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <TextBox Grid.Row="1"
+                                             Grid.Column="1"
+                                             Text="{Binding S3AutoSyncInterval}"
+                                             Watermark="0"/>
+
+                                    <TextBlock Grid.Row="2" Text="Always Sync" VerticalAlignment="Center" Foreground="#394B5A"/>
+                                    <CheckBox Grid.Row="2"
+                                              Grid.Column="1"
+                                              IsChecked="{Binding S3AlwaysSync}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="Save S3 Settings"
+                                    MinWidth="160"
+                                    Command="{Binding SaveS3SettingsCommand}" />
                             <Button Content="Back To Games"
                                     MinWidth="130"
                                     Command="{Binding ShowGameListCommand}" />
