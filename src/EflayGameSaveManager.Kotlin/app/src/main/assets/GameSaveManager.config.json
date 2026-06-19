@@ -1,0 +1,180 @@
+{
+  "version": "1.8.0",
+  "backup_path": "./save_data",
+  "games": [
+    {
+      "name": "Stellar Blade",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winLocalAppData>\\SB\\Saved\\SaveGames\\76561197960285355"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\StellarBlade\\SB.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "DuskLight",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\TwilitRealm\\Dusklight\\EUR\\Card A",
+            "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": "/storage/emulated/0/dustlight/appdata/EUR/Card A"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\Dusklight\\dusklight.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "塞尔达无双 海拉鲁全明星",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\yuzu\\nand\\user\\save\\0000000000000000\\6806D6615A93580790ABA6AC0E2A1796\\01002AB007FD2000"
+          },
+          "delete_before_apply": false
+        },
+        {
+          "id": 1,
+          "unit_type": "Zip",
+          "paths": {
+            "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": ""
+          },
+          "linked_unit_ids": [
+            0
+          ]
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 2,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "塞尔达传说 王国之泪",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\yuzu\\nand\\user\\save\\0000000000000000\\6806D6615A93580790ABA6AC0E2A1796\\0100F2C0115B6000"
+          },
+          "delete_before_apply": false
+        },
+        {
+          "id": 1,
+          "unit_type": "Zip",
+          "paths": {
+            "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": ""
+          },
+          "linked_unit_ids": [
+            0
+          ]
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 2,
+      "cloud_sync_enabled": true
+    }
+  ],
+  "settings": {
+    "prompt_when_not_described": true,
+    "extra_backup_when_apply": true,
+    "show_edit_button": false,
+    "prompt_when_auto_backup": true,
+    "exit_to_tray": true,
+    "cloud_settings": {
+      "always_sync": false,
+      "auto_sync_interval": 0,
+      "root_path": "/game-save-manager",
+      "backend": {
+        "type": "S3",
+        "endpoint": "",
+        "bucket": "",
+        "region": "",
+        "access_key_id": "",
+        "secret_access_key": ""
+      },
+      "max_concurrency": 1
+    },
+    "locale": "zh_SIMPLIFIED",
+    "default_delete_before_apply": false,
+    "default_expend_favorites_tree": false,
+    "home_page": "/",
+    "log_to_file": true,
+    "add_new_to_favorites": false,
+    "save_list_expand_behavior": "always_closed",
+    "save_list_last_expanded": false,
+    "max_auto_backup_count": 0,
+    "max_extra_backup_count": 5,
+    "appearance": {
+      "custom_font_enabled": false,
+      "ui_font_family": ""
+    },
+    "compression_preset": "Standard",
+    "compute_archive_hash": false,
+    "verify_archive_before_apply": false
+  },
+  "favorites": [
+    {
+      "node_id": "9da5dd12-0951-4bfb-bae4-d357610d4902",
+      "label": "DuskLight",
+      "is_leaf": true,
+      "children": null
+    }
+  ],
+  "quick_action": {
+    "quick_action_game": null,
+    "hotkeys": {
+      "apply": [
+        "",
+        "",
+        ""
+      ],
+      "backup": [
+        "",
+        "",
+        ""
+      ]
+    },
+    "enable_sound": true,
+    "enable_notification": true,
+    "sounds": {
+      "success": {
+        "kind": "default"
+      },
+      "failure": {
+        "kind": "default"
+      }
+    }
+  },
+  "devices": {
+    "9139e669-846e-4077-af90-ea4f42c2e030": {
+      "id": "9139e669-846e-4077-af90-ea4f42c2e030",
+      "name": "gamesir"
+    },
+    "c9ff7b70-769d-4152-856e-a4ee5bc53d5d": {
+      "id": "c9ff7b70-769d-4152-856e-a4ee5bc53d5d",
+      "name": "LOCALHOST"
+    }
+    "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": {
+      "id": "cd0d180b-fd0e-416b-bb12-11c9b18fdd50",
+      "name": "Android"
+    }
+  }
+}

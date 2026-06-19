@@ -74,7 +74,7 @@ public partial class MainPageViewModel : ObservableObject
     private bool _isNavigationDrawerOpen;
 
     [ObservableProperty]
-    private string _selectedNavigationTab = NavigationTabAllGames;
+    private string _selectedNavigationTab = NavigationTabFavorites;
 
     [ObservableProperty]
     private string _configRawText = string.Empty;
