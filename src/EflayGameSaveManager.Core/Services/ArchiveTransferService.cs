@@ -55,7 +55,7 @@ public sealed class ArchiveTransferService
             else if (saveUnit.UnitType == SaveUnitType.File)
             {
                 Directory.CreateDirectory(stagedPath);
-                File.Copy(currentPath.Path, Path.Combine(stagedPath, Path.GetFileName(currentPath.Path)), overwrite: true);
+                FileCopyHelper.CopyFile(currentPath.Path, Path.Combine(stagedPath, Path.GetFileName(currentPath.Path)));
             }
             else
             {
@@ -66,7 +66,7 @@ public sealed class ArchiveTransferService
         var archivePath = Path.Combine(workingDirectory, "current-device-save.zip");
         if (File.Exists(archivePath))
         {
-            File.Delete(archivePath);
+            FileCopyHelper.DeleteFileIfExists(archivePath);
         }
 
         ZipFile.CreateFromDirectory(stagingDirectory, archivePath, CompressionLevel.Optimal, includeBaseDirectory: false);
@@ -97,7 +97,7 @@ public sealed class ArchiveTransferService
                 {
                     var targetDir = Path.GetDirectoryName(item.Path!.Path);
                     if (!string.IsNullOrWhiteSpace(targetDir)) Directory.CreateDirectory(targetDir);
-                    File.Copy(normalizedArchivePath, item.Path.Path, overwrite: true);
+                    FileCopyHelper.CopyFile(normalizedArchivePath, item.Path.Path);
                     AppLogger.Info($"Restore Zip unit {item.Unit.Id}: saved to {item.Path.Path}");
                 }
             }
@@ -147,7 +147,7 @@ public sealed class ArchiveTransferService
                     }
                     else if (localUnit.UnitType == SaveUnitType.File && File.Exists(localPath.Path))
                     {
-                        File.Delete(localPath.Path);
+                        FileCopyHelper.DeleteFileIfExists(localPath.Path);
                     }
                     else if (localUnit.UnitType == SaveUnitType.Folder && Directory.Exists(localPath.Path))
                     {
@@ -173,7 +173,7 @@ public sealed class ArchiveTransferService
                     }
 
                     Directory.CreateDirectory(Path.GetDirectoryName(localPath.Path)!);
-                    File.Copy(sourceFile, localPath.Path, overwrite: true);
+                    FileCopyHelper.CopyFile(sourceFile, localPath.Path);
                     AppLogger.Info($"Restore unit {localUnit.Id}: copied {sourceFile} -> {localPath.Path}");
                 }
                 else
@@ -289,7 +289,7 @@ public sealed class ArchiveTransferService
 
         foreach (var file in Directory.GetFiles(sourceDirectory))
         {
-            File.Copy(file, Path.Combine(destinationDirectory, Path.GetFileName(file)), overwrite: true);
+            FileCopyHelper.CopyFile(file, Path.Combine(destinationDirectory, Path.GetFileName(file)));
         }
 
         foreach (var directory in Directory.GetDirectories(sourceDirectory))
@@ -327,7 +327,7 @@ public sealed class ArchiveTransferService
         var normalizedArchivePath = Path.Combine(workingDirectory, "mobile-restore.zip");
         if (File.Exists(normalizedArchivePath))
         {
-            File.Delete(normalizedArchivePath);
+            FileCopyHelper.DeleteFileIfExists(normalizedArchivePath);
         }
 
         // Keep this fixed to ordinary ZIP deflate for mobile zip restore exports,

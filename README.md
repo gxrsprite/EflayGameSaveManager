@@ -2,7 +2,7 @@
 
 Game save manager for keeping local game save paths and cloud backups in one shared configuration.
 
-The recommended app is now the Avalonia desktop version. It can be used independently for normal Windows usage, including creating a new configuration from scratch, adding games, editing save paths, and syncing cloud backups. The Lazarus version is kept as a lightweight fallback to try when Avalonia cannot run in a constrained environment such as some Winlator setups.
+The recommended app is now the Avalonia desktop version. It can be used independently for normal Windows usage, including creating a new configuration from scratch, adding games, editing save paths, and syncing cloud backups. It also runs on Linux-based gaming systems such as Bazzite and SteamOS (Steam Deck). The Lazarus version is kept as a lightweight fallback to try when Avalonia cannot run in a constrained environment such as some Winlator setups.
 
 ## Projects
 
@@ -42,6 +42,8 @@ Main and recommended desktop UI built with Avalonia.
 - Downloads, deletes, and rebuilds cloud backup indexes.
 - Can run the configured game executable and open related folders.
 - Can run in Winlator and GameSir environments, but startup is a little slower there.
+- Can run on Linux-based gaming systems such as Bazzite and SteamOS (Steam Deck); path separators are automatically normalized to forward slashes on non-Windows platforms.
+- A Linux ARM64 AOT publish script is available at `src/EflayGameSaveManager.Avalonia/publishaot-linux-arm.sh`.
 - Uses the shared Core project for config, save path handling, and cloud sync.
 
 Build:
@@ -250,7 +252,7 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 # Eflay Game Save Manager 中文说明
 
 这是一个游戏存档管理工具，用同一份配置维护本地游戏存档路径和云端备份。
-当前主推版本是 Avalonia 桌面版。它可以独立使用，支持从零创建配置、添加游戏、编辑存档路径和云同步。Lazarus 轻量版保留为备用方案，主要用于 Avalonia 在某些 Winlator 等受限环境中无法运行或启动过慢时尝试。
+当前主推版本是 Avalonia 桌面版。它可以独立使用，支持从零创建配置、添加游戏、编辑存档路径和云同步。同时支持在 Bazzite、SteamOS（Steam Deck）等 Linux 游戏系统上运行。Lazarus 轻量版保留为备用方案，主要用于 Avalonia 在某些 Winlator 等受限环境中无法运行或启动过慢时尝试。
 
 ## 项目说明
 
@@ -285,6 +287,9 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 - 从当前云存档或指定云备份恢复
 - 下载、删除云备份，重建云备份索引
 - 运行配置的游戏可执行文件，打开游戏目录或存档目录
+- 可在 Winlator 和 GameSir 环境中运行，但启动速度稍慢
+- 可在 Bazzite、SteamOS（Steam Deck）等 Linux 游戏系统上运行；非 Windows 平台自动将路径分隔符规范化为正斜杠
+- Linux ARM64 AOT 发布脚本位于 `src/EflayGameSaveManager.Avalonia/publishaot-linux-arm.sh`
 
 构建：
 ```powershell

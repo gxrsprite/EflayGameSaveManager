@@ -171,7 +171,15 @@
     "c9ff7b70-769d-4152-856e-a4ee5bc53d5d": {
       "id": "c9ff7b70-769d-4152-856e-a4ee5bc53d5d",
       "name": "LOCALHOST"
-    }
+    },
+    "629931f5-929d-4713-9fdf-6497c45be811": {
+      "id": "629931f5-929d-4713-9fdf-6497c45be811",
+      "name": "GamePad"
+    },
+    "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": {
+      "id": "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68",
+      "name": "PC"
+    },
     "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": {
       "id": "cd0d180b-fd0e-416b-bb12-11c9b18fdd50",
       "name": "Android"

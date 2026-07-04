@@ -31,6 +31,19 @@ public sealed class ConfigurationTests
         Assert.StartsWith(Environment.GetFolderPath(specialFolder), resolved, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(@"<home>\Saved Games\MyGame")]
+    [InlineData(@"\var\home\gx\EflayGameSaveManager-test\test-save")]
+    public void ResolvePath_NormalizesBackslashesForLinuxStylePaths(string input)
+    {
+        var resolver = new EnvironmentTokenResolver(normalizeBackslashes: true);
+
+        var resolved = resolver.ResolvePath(input);
+
+        Assert.DoesNotContain('\\', resolved);
+        Assert.Contains('/', resolved);
+    }
+
     [Fact]
     public void CreateSnapshot_ResolvesRelativeBackupRoot()
     {

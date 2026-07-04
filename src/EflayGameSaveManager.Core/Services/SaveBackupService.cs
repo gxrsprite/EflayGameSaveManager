@@ -34,7 +34,7 @@ public sealed class SaveBackupService
                     var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, saveUnit.Id.ToString());
                     Directory.CreateDirectory(deviceDirectory);
                     var destination = Path.Combine(deviceDirectory, Path.GetFileName(path.Path));
-                    await CopyFileAsync(path.Path, destination, cancellationToken);
+                    await FileCopyHelper.CopyFileAsync(path.Path, destination, cancellationToken);
                 }
                 else if (Directory.Exists(path.Path))
                 {
@@ -47,20 +47,13 @@ public sealed class SaveBackupService
         return targetDirectory;
     }
 
-    private static async Task CopyFileAsync(string sourceFile, string destinationFile, CancellationToken cancellationToken)
-    {
-        await using var source = File.OpenRead(sourceFile);
-        await using var destination = File.Create(destinationFile);
-        await source.CopyToAsync(destination, cancellationToken);
-    }
-
     private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
     {
         Directory.CreateDirectory(destinationDirectory);
 
         foreach (var file in Directory.GetFiles(sourceDirectory))
         {
-            File.Copy(file, Path.Combine(destinationDirectory, Path.GetFileName(file)), overwrite: true);
+            FileCopyHelper.CopyFile(file, Path.Combine(destinationDirectory, Path.GetFileName(file)));
         }
 
         foreach (var directory in Directory.GetDirectories(sourceDirectory))

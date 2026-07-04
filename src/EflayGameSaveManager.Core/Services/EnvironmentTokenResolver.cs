@@ -3,9 +3,16 @@ namespace EflayGameSaveManager.Core.Services;
 public sealed class EnvironmentTokenResolver
 {
     private readonly IReadOnlyDictionary<string, string> _tokenMap;
+    private readonly bool _normalizeBackslashes;
 
     public EnvironmentTokenResolver()
+        : this(!OperatingSystem.IsWindows())
     {
+    }
+
+    public EnvironmentTokenResolver(bool normalizeBackslashes)
+    {
+        _normalizeBackslashes = normalizeBackslashes;
         _tokenMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["<home>"] = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -32,6 +39,9 @@ public sealed class EnvironmentTokenResolver
             resolved = resolved.Replace(pair.Key, pair.Value, StringComparison.OrdinalIgnoreCase);
         }
 
-        return Environment.ExpandEnvironmentVariables(resolved);
+        resolved = Environment.ExpandEnvironmentVariables(resolved);
+        return _normalizeBackslashes
+            ? resolved.Replace('\\', '/')
+            : resolved;
     }
 }

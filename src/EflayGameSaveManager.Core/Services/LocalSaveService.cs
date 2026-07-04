@@ -63,7 +63,7 @@ public sealed class LocalSaveService
             var timestamp = DateTimeOffset.Now.ToString("yyyy-MM-dd_HH-mm-ss");
             var zipDestination = Path.Combine(gameDirectory, $"{timestamp}.zip");
 
-            File.Copy(archivePath, zipDestination, overwrite: true);
+            FileCopyHelper.CopyFile(archivePath, zipDestination);
             var zipSize = new FileInfo(zipDestination).Length;
 
             var manifest = await TryLoadManifestAsync(backupRoot, game.Name)
@@ -113,7 +113,7 @@ public sealed class LocalSaveService
 
         if (File.Exists(backup.Path))
         {
-            File.Delete(backup.Path);
+            FileCopyHelper.DeleteFileIfExists(backup.Path);
         }
 
         var remainingBackups = manifest.Backups
