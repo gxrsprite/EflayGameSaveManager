@@ -20,6 +20,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly CloudSyncService _cloudSyncService;
     private readonly LocalSaveService _localSaveService;
     private readonly IPathPickerService _pathPickerService;
+    private readonly EnvironmentTokenResolver _pathResolver = new();
 
     private ManagerConfig? _currentConfig;
     private AppSnapshot? _currentSnapshot;
@@ -165,6 +166,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<CloudBackupItemViewModel> CloudBackups { get; } = [];
     public ObservableCollection<LocalBackupItemViewModel> LocalBackups { get; } = [];
     public ObservableCollection<AddGameSaveUnitEditorViewModel> AddGameSaveUnits { get; } = [];
+    public ObservableCollection<ExternalLauncherEditorViewModel> CurrentDeviceExternalLaunchers { get; } = [];
 
     public MainWindowViewModel(
         GameSaveManagerConfigurationService configurationService,
@@ -327,10 +329,43 @@ public partial class MainWindowViewModel : ViewModelBase
                     game.GamePaths[_currentSnapshot.CurrentDevice.DeviceId] = CurrentDeviceGamePath.Trim();
                 }
 
+                var currentDeviceId = _currentSnapshot.CurrentDevice.DeviceId;
+                var activeLaunchers = new HashSet<ExternalLauncherDefinition>(
+                    CurrentDeviceExternalLaunchers
+                        .Where(item => item.Definition is not null)
+                        .Select(item => item.Definition!));
+
+                foreach (var launcher in game.ExternalLaunchers
+                             .Where(item => item.Paths.ContainsKey(currentDeviceId) && !activeLaunchers.Contains(item)))
+                {
+                    launcher.Paths.Remove(currentDeviceId);
+                }
+
+                foreach (var launcherEditor in CurrentDeviceExternalLaunchers)
+                {
+                    var category = launcherEditor.Category.Trim();
+                    var path = launcherEditor.Path.Trim();
+                    if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(path))
+                    {
+                        continue;
+                    }
+
+                    var launcher = launcherEditor.Definition ?? new ExternalLauncherDefinition();
+                    launcher.Category = category;
+                    launcher.Paths[currentDeviceId] = path;
+                    if (launcherEditor.Definition is null)
+                    {
+                        game.ExternalLaunchers.Add(launcher);
+                        launcherEditor.Definition = launcher;
+                    }
+                }
+
+                game.ExternalLaunchers.RemoveAll(item => item.Paths.Count == 0);
+
                 await _configurationService.SaveAsync(_currentSnapshot.ConfigPath, _currentConfig);
                 var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath);
                 ApplySnapshot(_currentConfig, refreshedSnapshot, SelectedGame.Name);
-                StatusMessage = $"Saved current-device paths for {SelectedGame.Name}.";
+                StatusMessage = $"Saved current-device settings for {SelectedGame.Name}.";
             });
     }
 
@@ -368,6 +403,23 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         AddGamePath = selectedPath;
+    }
+
+    [RelayCommand]
+    private void AddExternalLauncher()
+    {
+        if (!HasSelectedGame)
+        {
+            return;
+        }
+
+        CurrentDeviceExternalLaunchers.Add(new ExternalLauncherEditorViewModel(
+            null,
+            "Modifier",
+            string.Empty,
+            _pathPickerService,
+            RunExternalLauncher,
+            RemoveExternalLauncher));
     }
 
     [RelayCommand]
@@ -906,6 +958,63 @@ public partial class MainWindowViewModel : ViewModelBase
                 _pathPickerService,
                 async () => await SaveCurrentDevicePathsAsync()));
         }
+
+        CurrentDeviceExternalLaunchers.Clear();
+        var gameDefinition = _currentConfig?.Games.FirstOrDefault(item =>
+            string.Equals(item.Name, game.Name, StringComparison.Ordinal));
+        if (gameDefinition is null || _currentSnapshot is null)
+        {
+            return;
+        }
+
+        foreach (var launcher in gameDefinition.ExternalLaunchers.Where(item =>
+                     item.Paths.TryGetValue(_currentSnapshot.CurrentDevice.DeviceId, out var path) &&
+                     !string.IsNullOrWhiteSpace(path)))
+        {
+            CurrentDeviceExternalLaunchers.Add(new ExternalLauncherEditorViewModel(
+                launcher,
+                launcher.Category,
+                launcher.Paths[_currentSnapshot.CurrentDevice.DeviceId],
+                _pathPickerService,
+                RunExternalLauncher,
+                RemoveExternalLauncher));
+        }
+    }
+
+    private void RemoveExternalLauncher(ExternalLauncherEditorViewModel launcher)
+    {
+        CurrentDeviceExternalLaunchers.Remove(launcher);
+    }
+
+    private void RunExternalLauncher(string category, string path)
+    {
+        try
+        {
+            var resolvedPath = _pathResolver.ResolvePath(path);
+            if (string.IsNullOrWhiteSpace(resolvedPath))
+            {
+                StatusMessage = $"{category} path is empty.";
+                return;
+            }
+
+            if (!File.Exists(resolvedPath))
+            {
+                StatusMessage = $"{category} executable not found: {resolvedPath}";
+                return;
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = resolvedPath,
+                WorkingDirectory = Path.GetDirectoryName(resolvedPath) ?? AppContext.BaseDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error($"Failed to run external launcher: {path}", ex);
+            StatusMessage = $"{ex.Message} | Log: {LogPath}";
+        }
     }
 
     private void AddSaveUnitForNewGame(SaveUnitType unitType)
@@ -1290,6 +1399,55 @@ public sealed partial class CurrentSavePathEditorViewModel : ObservableObject
 
         Path = selectedPath;
         await _savePathsAsync();
+    }
+}
+
+public sealed partial class ExternalLauncherEditorViewModel : ObservableObject
+{
+    private readonly IPathPickerService _pathPickerService;
+    private readonly Action<string, string> _runLauncher;
+    private readonly Action<ExternalLauncherEditorViewModel> _remove;
+
+    public ExternalLauncherEditorViewModel(
+        ExternalLauncherDefinition? definition,
+        string category,
+        string path,
+        IPathPickerService pathPickerService,
+        Action<string, string> runLauncher,
+        Action<ExternalLauncherEditorViewModel> remove)
+    {
+        Definition = definition;
+        this.category = category;
+        this.path = path;
+        _pathPickerService = pathPickerService;
+        _runLauncher = runLauncher;
+        _remove = remove;
+        ChoosePathCommand = new AsyncRelayCommand(ChoosePathAsync);
+        RunCommand = new RelayCommand(() => _runLauncher(Category, Path));
+        RemoveCommand = new RelayCommand(() => _remove(this));
+    }
+
+    public ExternalLauncherDefinition? Definition { get; set; }
+
+    public IAsyncRelayCommand ChoosePathCommand { get; }
+
+    public IRelayCommand RunCommand { get; }
+
+    public IRelayCommand RemoveCommand { get; }
+
+    [ObservableProperty]
+    private string category;
+
+    [ObservableProperty]
+    private string path;
+
+    private async Task ChoosePathAsync()
+    {
+        var selectedPath = await _pathPickerService.PickGameExecutablePathAsync(Path);
+        if (!string.IsNullOrWhiteSpace(selectedPath))
+        {
+            Path = selectedPath;
+        }
     }
 }
 

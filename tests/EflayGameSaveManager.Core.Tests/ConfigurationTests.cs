@@ -89,4 +89,47 @@ public sealed class ConfigurationTests
             }
         }
     }
+
+    [Fact]
+    public async Task SaveAsync_PersistsPerDeviceExternalLauncherPaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager.Tests", Guid.NewGuid().ToString("N"));
+        var configPath = Path.Combine(root, GameSaveManagerConfigurationService.ConfigFileName);
+        var service = new GameSaveManagerConfigurationService();
+        var config = service.CreateDefault();
+        config.Games.Add(new GameDefinition
+        {
+            Name = "Test Game",
+            ExternalLaunchers =
+            [
+                new ExternalLauncherDefinition
+                {
+                    Category = "Modifier",
+                    Paths = new Dictionary<string, string>
+                    {
+                        ["desktop"] = @"C:\Tools\Trainer.exe",
+                        ["bazzite"] = "/home/gx/tools/trainer"
+                    }
+                }
+            ]
+        });
+
+        try
+        {
+            await service.SaveAsync(configPath, config);
+            var loaded = await service.LoadAsync(configPath);
+
+            var launcher = Assert.Single(Assert.Single(loaded.Games).ExternalLaunchers);
+            Assert.Equal("Modifier", launcher.Category);
+            Assert.Equal(@"C:\Tools\Trainer.exe", launcher.Paths["desktop"]);
+            Assert.Equal("/home/gx/tools/trainer", launcher.Paths["bazzite"]);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
 }

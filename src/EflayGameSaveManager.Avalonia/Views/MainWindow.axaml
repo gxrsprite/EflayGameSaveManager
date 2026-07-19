@@ -172,7 +172,7 @@
                             <Button Content="Open Game Folder"
                                     Command="{Binding OpenCurrentGameFolderCommand}"
                                     IsEnabled="{Binding HasSelectedGame}" />
-                            <Button Content="Save Current Device Paths"
+                            <Button Content="Save Current Device Settings"
                                     Command="{Binding SaveCurrentDevicePathsCommand}"
                                     IsEnabled="{Binding HasSelectedGame}" />
                         </StackPanel>
@@ -205,6 +205,44 @@
                                             Content="Select Path"
                                             Command="{Binding ChooseCurrentGamePathCommand}" />
                                 </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F7F8FF" BorderBrush="#C9D1F4" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="External Launchers" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                        <TextBlock Text="Full paths for this device. Use categories such as Modifier, Launcher, or Tool." Foreground="#5F7288" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1"
+                                            Content="Add External Program"
+                                            Command="{Binding AddExternalLauncherCommand}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding CurrentDeviceExternalLaunchers}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ExternalLauncherEditorViewModel">
+                                            <Grid Margin="0,0,0,8"
+                                                  ColumnDefinitions="150,*,Auto,Auto,Auto"
+                                                  ColumnSpacing="8">
+                                                <TextBox Text="{Binding Category}"
+                                                         Watermark="Category (for example Modifier)"/>
+                                                <TextBox Grid.Column="1"
+                                                         Text="{Binding Path}"
+                                                         Watermark="Full path to the external program"/>
+                                                <Button Grid.Column="2"
+                                                        Content="Run"
+                                                        Command="{Binding RunCommand}"/>
+                                                <Button Grid.Column="3"
+                                                        Content="Select Path"
+                                                        Command="{Binding ChoosePathCommand}"/>
+                                                <Button Grid.Column="4"
+                                                        Content="Remove"
+                                                        Command="{Binding RemoveCommand}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </Border>
 

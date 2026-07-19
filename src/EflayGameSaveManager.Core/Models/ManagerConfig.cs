@@ -38,11 +38,23 @@ public sealed class GameDefinition
     [JsonPropertyName("game_paths")]
     public Dictionary<string, string> GamePaths { get; set; } = [];
 
+    [JsonPropertyName("external_launchers")]
+    public List<ExternalLauncherDefinition> ExternalLaunchers { get; set; } = [];
+
     [JsonPropertyName("next_save_unit_id")]
     public int NextSaveUnitId { get; set; }
 
     [JsonPropertyName("cloud_sync_enabled")]
     public bool CloudSyncEnabled { get; set; }
+}
+
+public sealed class ExternalLauncherDefinition
+{
+    [JsonPropertyName("category")]
+    public string Category { get; set; } = string.Empty;
+
+    [JsonPropertyName("paths")]
+    public Dictionary<string, string> Paths { get; set; } = [];
 }
 
 public sealed class SaveUnitDefinition

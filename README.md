@@ -31,6 +31,7 @@ Main and recommended desktop UI built with Avalonia.
 - Standalone .NET desktop front end for normal Windows use.
 - Can start without an existing `GameSaveManager.config.json`; adding a game writes a new config file.
 - Lists games, save units, current-device paths, executable paths, cloud status, and cloud backup history.
+- Supports per-device external launch programs for each game. Each entry stores a category (for example `Modifier`) and a full executable path.
 - Adds new games from the UI.
 - Supports folder saves, file saves, zip saves (`Zip`), and Windows registry saves (`WinRegistry`).
 - Lets users select file/folder paths or edit paths manually, including token paths such as `<home>` and `<winLocalAppData>`.
@@ -43,7 +44,7 @@ Main and recommended desktop UI built with Avalonia.
 - Can run the configured game executable and open related folders.
 - Can run in Winlator and GameSir environments, but startup is a little slower there.
 - Can run on Linux-based gaming systems such as Bazzite and SteamOS (Steam Deck); path separators are automatically normalized to forward slashes on non-Windows platforms.
-- A Linux ARM64 AOT publish script is available at `src/EflayGameSaveManager.Avalonia/publishaot-linux-arm.sh`.
+- A Linux ARM64 AOT publish script is available at `publishscript/publish-avalonia-aot-linux-arm.sh`.
 - Uses the shared Core project for config, save path handling, and cloud sync.
 
 Build:
@@ -55,8 +56,10 @@ dotnet build src\EflayGameSaveManager.Avalonia\EflayGameSaveManager.Avalonia.csp
 Native AOT publish script:
 
 ```powershell
-src\EflayGameSaveManager.Avalonia\publishaot.bat
+publishscript\publish-avalonia-aot-win-x64.bat
 ```
+
+The AOT publish scripts remove debug symbol files from the publish output automatically.
 
 ### `EflayGameSaveManager.Lazarus`
 
@@ -111,7 +114,7 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManager.CloudTool.exe --action stat
 Native AOT publish script:
 
 ```powershell
-src\EflayGameSaveManager.CloudTool\publishaot.bat
+publishscript\publish-cloudtool-aot-win-x64.bat
 ```
 
 ### `EflayGameSaveManager.Lvgl`
@@ -289,7 +292,7 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 - 运行配置的游戏可执行文件，打开游戏目录或存档目录
 - 可在 Winlator 和 GameSir 环境中运行，但启动速度稍慢
 - 可在 Bazzite、SteamOS（Steam Deck）等 Linux 游戏系统上运行；非 Windows 平台自动将路径分隔符规范化为正斜杠
-- Linux ARM64 AOT 发布脚本位于 `src/EflayGameSaveManager.Avalonia/publishaot-linux-arm.sh`
+- Linux ARM64 AOT 发布脚本位于 `publishscript/publish-avalonia-aot-linux-arm.sh`
 
 构建：
 ```powershell
