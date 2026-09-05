@@ -8,4 +8,8 @@ public interface IPathPickerService
     Task<string?> PickGameExecutablePathAsync(string currentPath);
 
     Task<string?> PickSavePathAsync(SaveUnitType unitType, string currentPath);
+
+    Task<string?> PickMigrationPackageSavePathAsync();
+
+    Task<string?> PickMigrationPackageOpenPathAsync();
 }

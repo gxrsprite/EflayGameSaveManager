@@ -18,6 +18,7 @@ bin-release/
 *.pdb
 *.ipdb
 *.vshost.*
+__pycache__
 
 # === .NET ===
 .vs/

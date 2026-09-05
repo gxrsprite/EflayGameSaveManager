@@ -132,4 +132,44 @@ public sealed class ConfigurationTests
             }
         }
     }
+
+    [Fact]
+    public async Task RuntimeSettings_SaveAsync_PersistsLanguageWithoutChangingOtherSettings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager.Tests", Guid.NewGuid().ToString("N"));
+        var configPath = Path.Combine(root, GameSaveManagerConfigurationService.ConfigFileName);
+        var service = new AppRuntimeSettingsService();
+
+        try
+        {
+            await service.SaveAsync(configPath, new AppRuntimeSettings
+            {
+                ForcedDeviceName = "Android",
+                Language = AppLanguage.Chinese
+            });
+
+            var loaded = service.Load(configPath);
+
+            Assert.Equal("Android", loaded.ForcedDeviceName);
+            Assert.Equal(AppLanguage.Chinese, loaded.Language);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("", "WORKSTATION", AppLanguage.Chinese)]
+    [InlineData("", "LOCALHOST", AppLanguage.English)]
+    [InlineData("", "GameSir-Emulator", AppLanguage.English)]
+    [InlineData(AppLanguage.English, "WORKSTATION", AppLanguage.English)]
+    [InlineData(AppLanguage.Chinese, "LOCALHOST", AppLanguage.Chinese)]
+    public void AppLanguage_ResolvesConfiguredAndMachineDefaults(string configuredLanguage, string machineName, string expected)
+    {
+        Assert.Equal(expected, AppLanguage.Resolve(configuredLanguage, machineName));
+    }
 }

@@ -20,11 +20,15 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly CloudSyncService _cloudSyncService;
     private readonly LocalSaveService _localSaveService;
     private readonly IPathPickerService _pathPickerService;
+    private readonly SaveMigrationService _migrationService;
     private readonly EnvironmentTokenResolver _pathResolver = new();
+    private readonly AppRuntimeSettingsService _runtimeSettingsService = new();
 
     private ManagerConfig? _currentConfig;
     private AppSnapshot? _currentSnapshot;
     private string? _pendingCloudBackupOverwritePath;
+    private string? _runtimeSettingsConfigPath;
+    private bool _isApplyingLanguage;
 
     [ObservableProperty]
     private string _configPath = "Loading...";
@@ -143,6 +147,12 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _s3SettingsSummary = "Cloud backend is not configured.";
 
+    [ObservableProperty]
+    private UiStrings _strings = UiStrings.Create(AppLanguage.Chinese);
+
+    [ObservableProperty]
+    private LanguageOptionViewModel? _selectedLanguage;
+
     public string AddGameTokenHelp =>
         string.Join(
             Environment.NewLine,
@@ -167,19 +177,26 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<LocalBackupItemViewModel> LocalBackups { get; } = [];
     public ObservableCollection<AddGameSaveUnitEditorViewModel> AddGameSaveUnits { get; } = [];
     public ObservableCollection<ExternalLauncherEditorViewModel> CurrentDeviceExternalLaunchers { get; } = [];
+    public ObservableCollection<LanguageOptionViewModel> LanguageOptions { get; } =
+    [
+        new(AppLanguage.Chinese, "中文"),
+        new(AppLanguage.English, "English")
+    ];
 
     public MainWindowViewModel(
         GameSaveManagerConfigurationService configurationService,
         GameLibraryService gameLibraryService,
         CloudSyncService cloudSyncService,
         LocalSaveService localSaveService,
-        IPathPickerService pathPickerService)
+        IPathPickerService pathPickerService,
+        SaveMigrationService migrationService)
     {
         _configurationService = configurationService;
         _gameLibraryService = gameLibraryService;
         _cloudSyncService = cloudSyncService;
         _localSaveService = localSaveService;
         _pathPickerService = pathPickerService;
+        _migrationService = migrationService;
     }
 
     public Task InitializeAsync() => ReloadAsync();
@@ -203,6 +220,20 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnAddGameNameChanged(string value)
     {
         OnPropertyChanged(nameof(CanCreateGame));
+    }
+
+    partial void OnSelectedLanguageChanged(LanguageOptionViewModel? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        Strings = UiStrings.Create(value.Code);
+        if (!_isApplyingLanguage && !string.IsNullOrWhiteSpace(_runtimeSettingsConfigPath))
+        {
+            _ = SaveLanguageAsync(value.Code);
+        }
     }
 
     [RelayCommand]
@@ -262,6 +293,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 var snapshot = _gameLibraryService.CreateSnapshot(config, configPath);
 
+                ApplyRuntimeLanguage(configPath);
                 ApplySnapshot(config, snapshot);
                 StatusMessage = configWasCreatedInMemory
                     ? $"No config found. A new {GameSaveManagerConfigurationService.ConfigFileName} will be created when you add a game."
@@ -302,6 +334,57 @@ public partial class MainWindowViewModel : ViewModelBase
                     $"Uploaded {result.UploadedObjectCount} objects to {config.Settings.CloudSettings.Backend.Bucket}/{result.RootKey}";
                 StatusMessage = "All game backups uploaded.";
                 await RefreshSelectedGameCloudStatusAsync(forceReload: true);
+            });
+    }
+
+    [RelayCommand]
+    private async Task ExportAllSavesAsync()
+    {
+        if (_currentConfig is null || _currentSnapshot is null)
+        {
+            StatusMessage = "Configuration is not loaded yet.";
+            return;
+        }
+
+        var outputPath = await _pathPickerService.PickMigrationPackageSavePathAsync();
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            return;
+        }
+
+        await RunBusyAsync(
+            "Exporting all game saves...",
+            async () =>
+            {
+                var result = await _migrationService.CreatePackageAsync(_currentConfig, _currentSnapshot, outputPath);
+                StatusMessage = $"Exported {result.ProcessedGames} games to {outputPath}. " +
+                                (result.SkippedGames == 0 ? string.Empty : $"{result.SkippedGames} skipped.");
+            });
+    }
+
+    [RelayCommand]
+    private async Task RestoreAllSavesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ConfigPath) || ConfigPath == "Loading...")
+        {
+            StatusMessage = "Configuration is not loaded yet.";
+            return;
+        }
+
+        var packagePath = await _pathPickerService.PickMigrationPackageOpenPathAsync();
+        if (string.IsNullOrWhiteSpace(packagePath))
+        {
+            return;
+        }
+
+        await RunBusyAsync(
+            "Restoring all game saves...",
+            async () =>
+            {
+                var result = await _migrationService.RestorePackageAsync(packagePath, ConfigPath);
+                await ReloadAsync();
+                StatusMessage = $"Restored {result.ProcessedGames} games. " +
+                                (result.SkippedGames == 0 ? string.Empty : $"{result.SkippedGames} skipped.");
             });
     }
 
@@ -927,6 +1010,40 @@ public partial class MainWindowViewModel : ViewModelBase
         SelectedGame = Games.FirstOrDefault(item =>
                            string.Equals(item.Name, selectedGameName, StringComparison.Ordinal))
                        ?? Games.FirstOrDefault();
+    }
+
+    private void ApplyRuntimeLanguage(string configPath)
+    {
+        _runtimeSettingsConfigPath = configPath;
+        var settings = _runtimeSettingsService.Load(configPath);
+        var language = AppLanguage.Resolve(settings.Language, Environment.MachineName);
+
+        _isApplyingLanguage = true;
+        Strings = UiStrings.Create(language);
+        SelectedLanguage = LanguageOptions.First(option =>
+            string.Equals(option.Code, language, StringComparison.OrdinalIgnoreCase));
+        _isApplyingLanguage = false;
+    }
+
+    private async Task SaveLanguageAsync(string language)
+    {
+        if (string.IsNullOrWhiteSpace(_runtimeSettingsConfigPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var settings = _runtimeSettingsService.Load(_runtimeSettingsConfigPath);
+            settings.Language = language;
+            await _runtimeSettingsService.SaveAsync(_runtimeSettingsConfigPath, settings);
+            StatusMessage = Strings.LanguageSaved;
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Failed to save interface language.", ex);
+            StatusMessage = $"{ex.Message} | Log: {LogPath}";
+        }
     }
 
     private void ApplySelectedGameSnapshot(GameSnapshot game)

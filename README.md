@@ -14,6 +14,7 @@ Shared business logic.
 - Resolves current-device paths from `GameSaveManager.runtime.json`.
 - Resolves path tokens such as `<winDocuments>`, `<winLocalAppData>`, and `<home>`.
 - Creates local save archives.
+- Exports all configured games into one migration ZIP and restores the package with automatic directory creation.
 - Uploads, lists, downloads, restores, and deletes cloud backups through S3-compatible storage.
 
 Most UI projects should reuse this project instead of duplicating save/archive/cloud behavior.
@@ -32,6 +33,7 @@ Main and recommended desktop UI built with Avalonia.
 - Can start without an existing `GameSaveManager.config.json`; adding a game writes a new config file.
 - Lists games, save units, current-device paths, executable paths, cloud status, and cloud backup history.
 - Supports per-device external launch programs for each game. Each entry stores a category (for example `Modifier`) and a full executable path.
+- Supports instant Chinese/English interface switching. The selection is stored in `GameSaveManager.runtime.json` as `language`; Chinese is the default, except `LOCALHOST` and `GameSir` emulator machine names default to English.
 - Adds new games from the UI.
 - Supports folder saves, file saves, zip saves (`Zip`), and Windows registry saves (`WinRegistry`).
 - Lets users select file/folder paths or edit paths manually, including token paths such as `<home>` and `<winLocalAppData>`.
@@ -40,12 +42,18 @@ Main and recommended desktop UI built with Avalonia.
 - Lists local backups with device name, size, and date; restores or deletes selected local backups.
 - Uploads current saves to S3-compatible cloud storage.
 - Restores current cloud saves and selected cloud backup zip entries.
+- Exports all game saves to one migration package before reinstalling Windows, including the game configuration and one archive per game.
+- Restores a migration package after reinstalling Windows, automatically reconstructing configured device paths and directories before applying each game's save.
 - Downloads, deletes, and rebuilds cloud backup indexes.
 - Can run the configured game executable and open related folders.
 - Can run in Winlator and GameSir environments, but startup is a little slower there.
 - Can run on Linux-based gaming systems such as Bazzite and SteamOS (Steam Deck); path separators are automatically normalized to forward slashes on non-Windows platforms.
 - A Linux ARM64 AOT publish script is available at `publishscript/publish-avalonia-aot-linux-arm.sh`.
 - Uses the shared Core project for config, save path handling, and cloud sync.
+
+Migration package:
+
+The Avalonia header buttons export all available game saves to EflayGameSaveManager-migration.zip and restore that ZIP after reinstalling Windows. The package contains migration-manifest.json, the complete GameSaveManager.config.json, and a separate ZIP for every game with available save data. Treat it as sensitive because the configuration may contain cloud settings. Restore keeps a timestamped .before-migration-*.bak copy of the current configuration.
 
 Build:
 
@@ -292,6 +300,8 @@ src\EflayGameSaveManager.Lazarus\bin\GameSaveManagerLite.exe
 - 运行配置的游戏可执行文件，打开游戏目录或存档目录
 - 可在 Winlator 和 GameSir 环境中运行，但启动速度稍慢
 - 可在 Bazzite、SteamOS（Steam Deck）等 Linux 游戏系统上运行；非 Windows 平台自动将路径分隔符规范化为正斜杠
+- 主界面提供“导出全部存档”和“恢复全部存档”按钮。导出会把所有有实际存档的游戏、完整 GameSaveManager.config.json 和每个游戏独立的 ZIP 放入一个迁移包；恢复时会自动构造当前设备配置的文件夹并逐个还原。
+- 恢复前会把当前配置保留为带时间戳的 .before-migration-*.bak 文件。迁移包可能包含云端密钥等敏感配置，请妥善保管。
 - Linux ARM64 AOT 发布脚本位于 `publishscript/publish-avalonia-aot-linux-arm.sh`
 
 构建：

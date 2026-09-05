@@ -13,6 +13,7 @@ namespace EflayGameSaveManager.Core.Serialization;
 [JsonSerializable(typeof(BackupBatchManifest))]
 [JsonSerializable(typeof(LegacyGameBackups))]
 [JsonSerializable(typeof(LegacySyncState))]
+[JsonSerializable(typeof(SaveMigrationManifest))]
 internal partial class ManagerJsonSerializerContext : JsonSerializerContext
 {
 }

@@ -38,9 +38,13 @@ public partial class App : Application
                 new S3CompatibleCloudStorageClient(),
                 saveBackupService,
                 archiveTransferService);
+            var migrationService = new SaveMigrationService(
+                archiveTransferService,
+                configurationService,
+                gameLibraryService);
             var mainWindow = new MainWindow();
             var pathPickerService = new AvaloniaPathPickerService(mainWindow);
-            var viewModel = new MainWindowViewModel(configurationService, gameLibraryService, cloudSyncService, localSaveService, pathPickerService);
+            var viewModel = new MainWindowViewModel(configurationService, gameLibraryService, cloudSyncService, localSaveService, pathPickerService, migrationService);
 
             mainWindow.DataContext = viewModel;
             desktop.MainWindow = mainWindow;

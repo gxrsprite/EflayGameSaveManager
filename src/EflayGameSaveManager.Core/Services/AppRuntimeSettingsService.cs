@@ -25,4 +25,17 @@ public sealed class AppRuntimeSettingsService
         var json = File.ReadAllText(settingsPath);
         return JsonSerializer.Deserialize(json, ManagerJsonSerializerContext.Default.AppRuntimeSettings) ?? new AppRuntimeSettings();
     }
+
+    public async Task SaveAsync(string configPath, AppRuntimeSettings settings)
+    {
+        var settingsPath = GetSettingsPath(configPath);
+        var directory = Path.GetDirectoryName(settingsPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var json = JsonSerializer.Serialize(settings, ManagerJsonSerializerContext.Default.AppRuntimeSettings);
+        await File.WriteAllTextAsync(settingsPath, json);
+    }
 }

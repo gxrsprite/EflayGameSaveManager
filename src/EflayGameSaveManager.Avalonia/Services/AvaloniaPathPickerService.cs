@@ -70,6 +70,44 @@ public sealed class AvaloniaPathPickerService : IPathPickerService
         return folders.Count == 0 ? null : folders[0].Path.LocalPath;
     }
 
+    public async Task<string?> PickMigrationPackageSavePathAsync()
+    {
+        var file = await _owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export All Game Saves",
+            SuggestedFileName = "EflayGameSaveManager-migration.zip",
+            DefaultExtension = "zip",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("ZIP migration package")
+                {
+                    Patterns = ["*.zip"]
+                }
+            ]
+        });
+
+        return file?.Path.LocalPath;
+    }
+
+    public async Task<string?> PickMigrationPackageOpenPathAsync()
+    {
+        var files = await _owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Restore All Game Saves",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("ZIP migration package")
+                {
+                    Patterns = ["*.zip"]
+                },
+                FilePickerFileTypes.All
+            ]
+        });
+
+        return files.Count == 0 ? null : files[0].Path.LocalPath;
+    }
+
     private async Task<IStorageFolder?> GetSuggestedStartLocationAsync(string currentPath)
     {
         var candidate = currentPath.Trim();
