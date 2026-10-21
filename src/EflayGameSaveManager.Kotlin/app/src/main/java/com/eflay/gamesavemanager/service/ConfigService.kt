@@ -18,6 +18,9 @@ class ConfigService(private val context: Context) {
     companion object {
         const val CONFIG_FILE_NAME = "GameSaveManager.config.json"
         const val RUNTIME_FILE_NAME = "GameSaveManager.runtime.json"
+
+        /** Canonical platform id stored on the device entry (see Core AppPlatform). */
+        const val PLATFORM_ANDROID = "android"
     }
 
     suspend fun loadConfig(configPath: String): ManagerConfig = withContext(Dispatchers.IO) {
@@ -67,6 +70,19 @@ class ConfigService(private val context: Context) {
         return File(context.filesDir, "workspace")
     }
 
+    /**
+     * Returns the config with this device's platform recorded, so save-format decisions
+     * never have to be inferred from file paths. Returns the same instance when unchanged.
+     */
+    fun withCurrentPlatform(config: ManagerConfig, deviceId: String): ManagerConfig {
+        val device = config.devices[deviceId] ?: return config
+        if (device.platform == PLATFORM_ANDROID) return config
+
+        val updatedDevices = config.devices.toMutableMap()
+        updatedDevices[deviceId] = device.copy(platform = PLATFORM_ANDROID)
+        return config.copy(devices = updatedDevices)
+    }
+
     fun getConfigPath(): String {
         val dir = getWorkspaceDir()
         return File(dir, CONFIG_FILE_NAME).absolutePath
@@ -86,18 +102,25 @@ class ConfigService(private val context: Context) {
                     id = unit.id,
                     unitType = unit.unit_type,
                     path = path,
-                    deleteBeforeApply = unit.delete_before_apply
+                    deleteBeforeApply = unit.delete_before_apply,
+                    exclude = unit.exclude,
+                    contentsOnly = unit.contents_only
                 )
             }
             GameSnapshot(
                 name = game.name,
                 cloudSyncEnabled = game.cloud_sync_enabled,
-                saveUnits = saveUnits
+                saveUnits = saveUnits,
+                chineseName = game.chinese_name
             )
         }
         return AppSnapshot(
             games = games,
-            currentDevice = CurrentDeviceContext(deviceId = deviceId, deviceName = deviceName)
+            currentDevice = CurrentDeviceContext(
+                deviceId = deviceId,
+                deviceName = deviceName,
+                platform = PLATFORM_ANDROID
+            )
         )
     }
 

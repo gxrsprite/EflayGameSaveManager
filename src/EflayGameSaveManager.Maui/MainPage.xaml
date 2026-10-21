@@ -169,6 +169,17 @@
                                             <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSelectedSaveFolderCommand}" />
                                         </Grid>
                                         <Entry Text="{Binding EditGamePath}" Placeholder="Android game launch path (optional)" />
+                                        <Entry Text="{Binding EditExcludePatterns}" Placeholder="Exclude patterns, e.g. settings*; Prefs.dict" />
+                                        <Label Text="Matching files are never packed on backup and never overwritten on restore."
+                                               FontSize="11"
+                                               TextColor="{StaticResource MutedTextColor}"
+                                               LineBreakMode="WordWrap" />
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Switch IsToggled="{Binding EditContentsOnly}" />
+                                            <Label Text="Sync folder contents only (ignore folder name)"
+                                                   FontSize="12"
+                                                   VerticalOptions="Center" />
+                                        </HorizontalStackLayout>
                                         <Button Text="Save Android paths" Command="{Binding SaveSelectedGamePathsCommand}" />
                                     </VerticalStackLayout>
                                 </Border>

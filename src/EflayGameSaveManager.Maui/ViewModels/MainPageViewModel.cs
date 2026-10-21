@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EflayGameSaveManager.Core.Models;
 using EflayGameSaveManager.Core.Services;
+using EflayGameSaveManager.Core.Services.GamePlugins;
 using EflayGameSaveManager.Maui.Services;
 using Microsoft.Maui.Devices;
 
@@ -63,6 +64,14 @@ public partial class MainPageViewModel : ObservableObject
 
     [ObservableProperty]
     private string _editGamePath = string.Empty;
+
+    /// <summary>Semicolon-separated wildcards for device-local files (neither packed nor overwritten).</summary>
+    [ObservableProperty]
+    private string _editExcludePatterns = string.Empty;
+
+    /// <summary>Folder units only: sync the folder's contents and ignore its own name.</summary>
+    [ObservableProperty]
+    private bool _editContentsOnly;
 
     [ObservableProperty]
     private bool _isBusy;
@@ -199,7 +208,13 @@ public partial class MainPageViewModel : ObservableObject
         _favoriteGameNames = new HashSet<string>(_favoriteGamesService.Load(), StringComparer.OrdinalIgnoreCase);
 
         var deviceName = $"{DeviceInfo.Current.Manufacturer} {DeviceInfo.Current.Model}".Trim();
-        _currentSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, deviceName);
+        _currentSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, deviceName, DeviceInfo.Current.Platform.ToString());
+
+        // Record this device's real platform so save-format decisions never rely on path shapes.
+        if (_currentSnapshot.CurrentDevice.PlatformChanged)
+        {
+            await _configurationService.SaveAsync(_configPath, _currentConfig);
+        }
 
         ConfigPathSummary = $"Config: {_configPath}";
         CurrentDeviceSummary =
@@ -455,13 +470,13 @@ public partial class MainPageViewModel : ObservableObject
             async () =>
             {
 #if ANDROID
-                var tempDirs = await StageRestrictedPathsForUploadAsync(game.Name, snapshot.CurrentDevice.DeviceId);
+                var staged = await StageRestrictedPathsForUploadAsync(game.Name, snapshot.CurrentDevice.DeviceId);
 #endif
                 try
                 {
                     // Rebuild snapshot with potentially redirected paths
                     var uploadSnapshot = _currentConfig is not null
-                        ? _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, snapshot.CurrentDevice.DeviceName)
+                        ? _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, snapshot.CurrentDevice.DeviceName, DeviceInfo.Current.Platform.ToString())
                         : snapshot;
 
                     var result = await _cloudSyncService.UploadGameCurrentSaveAsync(
@@ -473,7 +488,8 @@ public partial class MainPageViewModel : ObservableObject
                 finally
                 {
 #if ANDROID
-                    CleanupTempDirs(tempDirs);
+                    RestoreStagedPathsForUpload(game.Name, snapshot.CurrentDevice.DeviceId, staged.OriginalPaths);
+                    CleanupTempDirs(staged.TempDirs);
 #endif
                 }
             });
@@ -545,18 +561,27 @@ public partial class MainPageViewModel : ObservableObject
             $"Restoring {game.Name} latest cloud save...",
             async () =>
             {
+                // Resolve the encoding platform from the REAL device paths before any
+                // redirect: the restricted-path redirect below swaps the unit path for a
+                // cache folder, which would otherwise be detected as a desktop target and
+                // make the restore write PC-format .json files the Android port cannot read.
+                var targetPlatform = GameSaveFormatPlugins
+                    .ForGame(game)?
+                    .ResolveTarget(game, snapshot.CurrentDevice);
+
 #if ANDROID
                 var redirectMap = await RedirectRestrictedPathsForRestoreAsync(game.Name, snapshot.CurrentDevice.DeviceId);
 #endif
                 try
                 {
                     var restoreSnapshot = _currentConfig is not null
-                        ? _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, snapshot.CurrentDevice.DeviceName)
+                        ? _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, snapshot.CurrentDevice.DeviceName, DeviceInfo.Current.Platform.ToString())
                         : snapshot;
 
                     var result = await _cloudSyncService.RestoreGameLatestSaveAsync(
                         restoreSnapshot.Games.First(g => g.Name == game.Name),
-                        snapshot.CurrentDevice, cloudSettings);
+                        snapshot.CurrentDevice, cloudSettings,
+                        targetPlatformOverride: targetPlatform);
                     StatusMessage = $"Restored latest cloud save from {result.RootKey}.";
 #if ANDROID
                     await ApplyRestoredFilesToRestrictedPathsAsync(redirectMap);
@@ -583,33 +608,66 @@ public partial class MainPageViewModel : ObservableObject
                path.Contains("/Android/obb/");
     }
 
-    private async Task<List<string>> StageRestrictedPathsForUploadAsync(string gameName, string deviceId)
+    private sealed record StagedUploadPaths(List<string> TempDirs, Dictionary<int, string> OriginalPaths);
+
+    private async Task<StagedUploadPaths> StageRestrictedPathsForUploadAsync(string gameName, string deviceId)
     {
         var tempDirs = new List<string>();
+        var originals = new Dictionary<int, string>();
         var gameDef = _currentConfig?.Games.FirstOrDefault(g =>
             string.Equals(g.Name, gameName, StringComparison.OrdinalIgnoreCase));
-        if (gameDef is null || _currentConfig is null) return tempDirs;
+        if (gameDef is null || _currentConfig is null) return new StagedUploadPaths(tempDirs, originals);
 
         var stagingRoot = Path.Combine(FileSystem.CacheDirectory, "shizuku-upload", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stagingRoot);
+        tempDirs.Add(stagingRoot);
+
+        try
+        {
+            foreach (var unit in gameDef.SavePaths)
+            {
+                if (!unit.Paths.TryGetValue(deviceId, out var originalPath) ||
+                    string.IsNullOrWhiteSpace(originalPath) ||
+                    !IsRestrictedPath(originalPath))
+                    continue;
+
+                var stagedPath = await Platforms.Android.ShizukuFileService.CopyFromRestrictedAsync(
+                    originalPath, Path.Combine(stagingRoot, $"unit-{unit.Id}"));
+                if (stagedPath is null)
+                {
+                    throw new IOException(
+                        $"备份失败：无法读取受限存档目录 {originalPath}。" +
+                        Platforms.Android.ShizukuFileService.StatusMessage);
+                }
+
+                originals[unit.Id] = originalPath;
+                unit.Paths[deviceId] = stagedPath;
+            }
+
+            return new StagedUploadPaths(tempDirs, originals);
+        }
+        catch
+        {
+            RestoreStagedPathsForUpload(gameName, deviceId, originals);
+            CleanupTempDirs(tempDirs);
+            throw;
+        }
+    }
+
+    private void RestoreStagedPathsForUpload(string gameName, string deviceId, Dictionary<int, string> originals)
+    {
+        if (originals.Count == 0) return;
+        var gameDef = _currentConfig?.Games.FirstOrDefault(g =>
+            string.Equals(g.Name, gameName, StringComparison.OrdinalIgnoreCase));
+        if (gameDef is null) return;
 
         foreach (var unit in gameDef.SavePaths)
         {
-            if (!unit.Paths.TryGetValue(deviceId, out var originalPath) ||
-                string.IsNullOrWhiteSpace(originalPath) ||
-                !IsRestrictedPath(originalPath))
-                continue;
-
-            var stagedPath = await Platforms.Android.ShizukuFileService.CopyFromRestrictedAsync(
-                originalPath, stagingRoot);
-            if (stagedPath is not null)
+            if (originals.TryGetValue(unit.Id, out var originalPath))
             {
-                tempDirs.Add(stagedPath);
-                unit.Paths[deviceId] = stagedPath;
+                unit.Paths[deviceId] = originalPath;
             }
         }
-
-        return tempDirs;
     }
 
     private sealed record RestoreRedirect(string OriginalPath, string TempDir, string DeviceId, int SaveUnitId);
@@ -642,12 +700,28 @@ public partial class MainPageViewModel : ObservableObject
 
     private static async Task ApplyRestoredFilesToRestrictedPathsAsync(List<RestoreRedirect> redirects)
     {
+        var failures = new List<string>();
         foreach (var r in redirects)
         {
-            if (Directory.Exists(r.TempDir) || File.Exists(r.TempDir))
+            if (!Directory.Exists(r.TempDir) && !File.Exists(r.TempDir))
             {
-                await Platforms.Android.ShizukuFileService.CopyToRestrictedAsync(r.TempDir, r.OriginalPath);
+                continue;
             }
+
+            var copied = await Platforms.Android.ShizukuFileService.CopyToRestrictedAsync(r.TempDir, r.OriginalPath);
+            if (!copied)
+            {
+                failures.Add(r.OriginalPath);
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            // Never report success when the restricted write silently failed.
+            throw new InvalidOperationException(
+                "恢复失败：无法写入受限目录 " + string.Join("；", failures) +
+                "。当前 Shizuku 状态：" + Platforms.Android.ShizukuFileService.StatusMessage +
+                "。请打开 Shizuku 应用确认已启动并授权本应用后重试。");
         }
     }
 
@@ -969,6 +1043,8 @@ public partial class MainPageViewModel : ObservableObject
                 }
 
                 targetUnit.Paths[deviceId] = savePath;
+                targetUnit.Exclude = SavePathFilter.ParsePatterns(EditExcludePatterns);
+                targetUnit.ContentsOnly = EditContentsOnly;
 
                 if (string.IsNullOrWhiteSpace(gamePath))
                 {
@@ -1061,6 +1137,8 @@ public partial class MainPageViewModel : ObservableObject
             SelectedSaveUnitTarget = null;
             EditSavePath = string.Empty;
             EditGamePath = string.Empty;
+            EditExcludePatterns = string.Empty;
+            EditContentsOnly = false;
             return;
         }
 
@@ -1096,12 +1174,19 @@ public partial class MainPageViewModel : ObservableObject
             SelectedSaveUnitTarget = SaveUnitTargets.FirstOrDefault(option =>
                 !option.IsNew && option.SaveUnitId == currentDevicePath.SaveUnitId);
             EditSavePath = currentDevicePath.Path;
+            EditExcludePatterns = SavePathFilter.FormatPatterns(
+                selectedGameDefinition?.SavePaths
+                    .FirstOrDefault(unit => unit.Id == currentDevicePath.SaveUnitId)?.Exclude);
+            EditContentsOnly = selectedGameDefinition?.SavePaths
+                .FirstOrDefault(unit => unit.Id == currentDevicePath.SaveUnitId)?.ContentsOnly ?? false;
             return;
         }
 
         SelectedSaveUnitTarget = SaveUnitTargets.FirstOrDefault(option => !option.IsNew)
                                  ?? SaveUnitTargets.FirstOrDefault();
         EditSavePath = string.Empty;
+        EditExcludePatterns = string.Empty;
+        EditContentsOnly = false;
     }
 
     private GameDefinition? TryGetSelectedGameDefinition(string gameName)

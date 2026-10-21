@@ -29,6 +29,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private string? _pendingCloudBackupOverwritePath;
     private string? _runtimeSettingsConfigPath;
     private bool _isApplyingLanguage;
+    private string _currentLanguage = AppLanguage.Chinese;
 
     [ObservableProperty]
     private string _configPath = "Loading...";
@@ -79,6 +80,18 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _selectedGameName = "Select a game";
 
     [ObservableProperty]
+    private string _selectedGameNote = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasSelectedGameNote;
+
+    [ObservableProperty]
+    private string _editGameChineseName = string.Empty;
+
+    [ObservableProperty]
+    private string _editGameNote = string.Empty;
+
+    [ObservableProperty]
     private string _selectedGameStats = string.Empty;
 
     [ObservableProperty]
@@ -113,6 +126,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _addGameName = string.Empty;
+
+    [ObservableProperty]
+    private string _addGameChineseName = string.Empty;
+
+    [ObservableProperty]
+    private string _addGameNote = string.Empty;
 
     [ObservableProperty]
     private string _addGamePath = string.Empty;
@@ -230,6 +249,8 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         Strings = UiStrings.Create(value.Code);
+        _currentLanguage = value.Code;
+        RefreshGameDisplayNames();
         if (!_isApplyingLanguage && !string.IsNullOrWhiteSpace(_runtimeSettingsConfigPath))
         {
             _ = SaveLanguageAsync(value.Code);
@@ -291,7 +312,14 @@ public partial class MainWindowViewModel : ViewModelBase
                     configWasCreatedInMemory = true;
                 }
 
-                var snapshot = _gameLibraryService.CreateSnapshot(config, configPath);
+                var snapshot = _gameLibraryService.CreateSnapshot(config, configPath, platform: AppPlatform.Current);
+
+                // Record this device's real platform so save-format decisions never rely on
+                // path shapes. Persist immediately, otherwise it only lands on the next save.
+                if (snapshot.CurrentDevice.PlatformChanged && !configWasCreatedInMemory)
+                {
+                    await _configurationService.SaveAsync(configPath, config);
+                }
 
                 ApplyRuntimeLanguage(configPath);
                 ApplySnapshot(config, snapshot);
@@ -405,6 +433,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     var saveUnit = game.SavePaths.First(unit => unit.Id == pathEditor.SaveUnitId);
                     saveUnit.Paths[_currentSnapshot.CurrentDevice.DeviceId] = pathEditor.Path.Trim();
+                    saveUnit.Exclude = SavePathFilter.ParsePatterns(pathEditor.ExcludePatterns);
+                    saveUnit.ContentsOnly = pathEditor.ContentsOnly;
                 }
 
                 if (!string.IsNullOrWhiteSpace(CurrentDeviceGamePath))
@@ -445,8 +475,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 game.ExternalLaunchers.RemoveAll(item => item.Paths.Count == 0);
 
+                game.ChineseName = EditGameChineseName.Trim();
+                game.Note = EditGameNote.Trim();
+
                 await _configurationService.SaveAsync(_currentSnapshot.ConfigPath, _currentConfig);
-                var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath);
+                var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath, platform: AppPlatform.Current);
                 ApplySnapshot(_currentConfig, refreshedSnapshot, SelectedGame.Name);
                 StatusMessage = $"Saved current-device settings for {SelectedGame.Name}.";
             });
@@ -558,6 +591,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 Id = index,
                 UnitType = unit.UnitType,
                 DeleteBeforeApply = false,
+                Exclude = SavePathFilter.ParsePatterns(unit.ExcludePatterns),
+                ContentsOnly = unit.ContentsOnly,
                 Paths = new Dictionary<string, string>
                 {
                     [_currentSnapshot.CurrentDevice.DeviceId] = unit.Path.Trim()
@@ -578,6 +613,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 var game = new GameDefinition
                 {
                     Name = gameName,
+                    ChineseName = AddGameChineseName.Trim(),
+                    Note = AddGameNote.Trim(),
                     SavePaths = units,
                     GamePaths = string.IsNullOrWhiteSpace(AddGamePath)
                         ? []
@@ -591,7 +628,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 _currentConfig.Games.Add(game);
                 await _configurationService.SaveAsync(_currentSnapshot.ConfigPath, _currentConfig);
-                var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath);
+                var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath, platform: AppPlatform.Current);
                 ResetAddGameForm();
                 ApplySnapshot(_currentConfig, refreshedSnapshot, gameName);
                 ShowGameList();
@@ -648,7 +685,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 };
 
                 await _configurationService.SaveAsync(_currentSnapshot.ConfigPath, _currentConfig);
-                var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath);
+                var refreshedSnapshot = _gameLibraryService.CreateSnapshot(_currentConfig, _currentSnapshot.ConfigPath, platform: AppPlatform.Current);
                 ApplySnapshot(_currentConfig, refreshedSnapshot, SelectedGame?.Name);
                 ShowSettings();
                 StatusMessage = IsCloudConfigured(_currentConfig.Settings.CloudSettings)
@@ -968,7 +1005,11 @@ public partial class MainWindowViewModel : ViewModelBase
         if (_currentSnapshot is null || selectedGame is null)
         {
             HasSelectedGame = false;
-            SelectedGameName = "Select a game";
+            SelectedGameName = Strings.SelectGame;
+            SelectedGameNote = string.Empty;
+            HasSelectedGameNote = false;
+            EditGameChineseName = string.Empty;
+            EditGameNote = string.Empty;
             SelectedGameStats = string.Empty;
             SelectedGameSaveSummary = string.Empty;
             SelectedGameExecutableSummary = string.Empty;
@@ -1004,7 +1045,9 @@ public partial class MainWindowViewModel : ViewModelBase
         Games.Clear();
         foreach (var game in snapshot.Games)
         {
-            Games.Add(new GameListItemViewModel(game.Name, game.CloudSyncEnabled));
+            var item = new GameListItemViewModel(game.Name, game.ChineseName, game.Note, game.CloudSyncEnabled);
+            item.RefreshDisplayName(_currentLanguage);
+            Games.Add(item);
         }
 
         SelectedGame = Games.FirstOrDefault(item =>
@@ -1019,10 +1062,38 @@ public partial class MainWindowViewModel : ViewModelBase
         var language = AppLanguage.Resolve(settings.Language, Environment.MachineName);
 
         _isApplyingLanguage = true;
+        _currentLanguage = language;
         Strings = UiStrings.Create(language);
         SelectedLanguage = LanguageOptions.First(option =>
             string.Equals(option.Code, language, StringComparison.OrdinalIgnoreCase));
         _isApplyingLanguage = false;
+    }
+
+    private void RefreshGameDisplayNames()
+    {
+        foreach (var item in Games)
+        {
+            item.RefreshDisplayName(_currentLanguage);
+        }
+
+        if (SelectedGame is null || _currentSnapshot is null)
+        {
+            SelectedGameName = Strings.SelectGame;
+            SelectedGameNote = string.Empty;
+            HasSelectedGameNote = false;
+            return;
+        }
+
+        var game = _currentSnapshot.Games.FirstOrDefault(item =>
+            string.Equals(item.Name, SelectedGame.Name, StringComparison.Ordinal));
+        if (game is null)
+        {
+            return;
+        }
+
+        SelectedGameName = GameDisplayNames.Resolve(game, _currentLanguage);
+        SelectedGameNote = game.Note.Trim();
+        HasSelectedGameNote = GameDisplayNames.HasNote(SelectedGameNote);
     }
 
     private async Task SaveLanguageAsync(string language)
@@ -1049,7 +1120,11 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ApplySelectedGameSnapshot(GameSnapshot game)
     {
         HasSelectedGame = true;
-        SelectedGameName = game.Name;
+        SelectedGameName = GameDisplayNames.Resolve(game, _currentLanguage);
+        SelectedGameNote = game.Note.Trim();
+        HasSelectedGameNote = GameDisplayNames.HasNote(SelectedGameNote);
+        EditGameChineseName = string.Empty;
+        EditGameNote = string.Empty;
         SelectedGameStats = $"Save units: {game.SaveUnits.Count} | Devices: {game.SaveUnits.SelectMany(unit => unit.Paths).Select(path => path.DeviceId).Distinct(StringComparer.OrdinalIgnoreCase).Count()}";
         SelectedGameSaveSummary = string.Join(
             Environment.NewLine,
@@ -1071,6 +1146,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 currentPath.SaveUnitId,
                 currentPath.UnitType,
                 currentPath.Path,
+                SavePathFilter.FormatPatterns(_currentConfig?.Games
+                    .FirstOrDefault(item => string.Equals(item.Name, game.Name, StringComparison.Ordinal))?
+                    .SavePaths.FirstOrDefault(unit => unit.Id == currentPath.SaveUnitId)?.Exclude),
+                _currentConfig?.Games
+                    .FirstOrDefault(item => string.Equals(item.Name, game.Name, StringComparison.Ordinal))?
+                    .SavePaths.FirstOrDefault(unit => unit.Id == currentPath.SaveUnitId)?.ContentsOnly ?? false,
                 OpenPath,
                 _pathPickerService,
                 async () => await SaveCurrentDevicePathsAsync()));
@@ -1083,6 +1164,9 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             return;
         }
+
+        EditGameChineseName = gameDefinition.ChineseName;
+        EditGameNote = gameDefinition.Note;
 
         foreach (var launcher in gameDefinition.ExternalLaunchers.Where(item =>
                      item.Paths.TryGetValue(_currentSnapshot.CurrentDevice.DeviceId, out var path) &&
@@ -1161,6 +1245,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ResetAddGameForm()
     {
         AddGameName = string.Empty;
+        AddGameChineseName = string.Empty;
+        AddGameNote = string.Empty;
         AddGamePath = string.Empty;
         AddGameSaveUnits.Clear();
         AddSaveUnitForNewGame(SaveUnitType.Folder);
@@ -1374,10 +1460,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
 public sealed partial class GameListItemViewModel : ObservableObject
 {
-    public GameListItemViewModel(string name, bool cloudSyncEnabled)
+    public GameListItemViewModel(string name, string chineseName, string note, bool cloudSyncEnabled)
     {
         Name = name;
+        ChineseName = chineseName ?? string.Empty;
         CloudSyncEnabled = cloudSyncEnabled;
+        DisplayName = name;
+        Note = (note ?? string.Empty).Trim();
+        HasNote = GameDisplayNames.HasNote(Note);
     }
 
     [ObservableProperty]
@@ -1386,9 +1476,25 @@ public sealed partial class GameListItemViewModel : ObservableObject
     [ObservableProperty]
     private string _cloudBadge = "Cloud: ?";
 
+    [ObservableProperty]
+    private string _displayName = string.Empty;
+
+    [ObservableProperty]
+    private string _note = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasNote;
+
     public string Name { get; }
 
+    public string ChineseName { get; }
+
     public bool CloudSyncEnabled { get; }
+
+    public void RefreshDisplayName(string? language)
+    {
+        DisplayName = GameDisplayNames.Resolve(Name, ChineseName, language);
+    }
 
     public void SetCloudStatus(GameCloudStatus status)
     {
@@ -1451,6 +1557,14 @@ public sealed partial class AddGameSaveUnitEditorViewModel : ObservableObject
     [ObservableProperty]
     private string path;
 
+    /// <summary>Semicolon- or comma-separated exclusion patterns for this unit.</summary>
+    [ObservableProperty]
+    private string excludePatterns = string.Empty;
+
+    /// <summary>Folder units only: sync the folder's contents and ignore its own name.</summary>
+    [ObservableProperty]
+    private bool contentsOnly;
+
     partial void OnPathChanged(string value)
     {
         _pathChanged();
@@ -1482,6 +1596,8 @@ public sealed partial class CurrentSavePathEditorViewModel : ObservableObject
         int saveUnitId,
         SaveUnitType unitType,
         string path,
+        string excludePatterns,
+        bool contentsOnly,
         Action<string> openPath,
         IPathPickerService pathPickerService,
         Func<Task> savePathsAsync)
@@ -1489,6 +1605,8 @@ public sealed partial class CurrentSavePathEditorViewModel : ObservableObject
         SaveUnitId = saveUnitId;
         UnitType = unitType;
         this.path = path;
+        this.excludePatterns = excludePatterns;
+        this.contentsOnly = contentsOnly;
         _pathPickerService = pathPickerService;
         _savePathsAsync = savePathsAsync;
         OpenPathCommand = new RelayCommand(() => openPath(Path));
@@ -1505,6 +1623,14 @@ public sealed partial class CurrentSavePathEditorViewModel : ObservableObject
 
     [ObservableProperty]
     private string path;
+
+    /// <summary>Semicolon- or comma-separated exclusion patterns, e.g. <c>settings*; Prefs.dict</c>.</summary>
+    [ObservableProperty]
+    private string excludePatterns;
+
+    /// <summary>Folder units only: sync the folder's contents and ignore its own name.</summary>
+    [ObservableProperty]
+    private bool contentsOnly;
 
     private async Task ChoosePathAsync()
     {

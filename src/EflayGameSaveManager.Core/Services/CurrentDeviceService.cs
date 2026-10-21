@@ -4,15 +4,28 @@ namespace EflayGameSaveManager.Core.Services;
 
 public sealed class CurrentDeviceService
 {
-    public CurrentDeviceContext EnsureCurrentDevice(ManagerConfig config, string? machineName = null)
+    /// <summary>
+    /// Resolves (or registers) the device this process runs on.
+    /// <paramref name="platform"/> is the real platform reported by the client; it is stored on
+    /// the device entry and refreshed when it changes, so plugins never have to infer the
+    /// platform from file paths.
+    /// </summary>
+    public CurrentDeviceContext EnsureCurrentDevice(ManagerConfig config, string? machineName = null, string? platform = null)
     {
         var currentMachineName = string.IsNullOrWhiteSpace(machineName) ? Environment.MachineName : machineName.Trim();
+        var normalizedPlatform = AppPlatform.Normalize(platform ?? AppPlatform.Current);
 
         foreach (var device in config.Devices.Values)
         {
             if (string.Equals(device.Name, currentMachineName, StringComparison.OrdinalIgnoreCase))
             {
-                return new CurrentDeviceContext(device.Id, device.Name, false);
+                var changed = !string.Equals(device.Platform, normalizedPlatform, StringComparison.OrdinalIgnoreCase);
+                if (changed)
+                {
+                    device.Platform = normalizedPlatform;
+                }
+
+                return new CurrentDeviceContext(device.Id, device.Name, false, normalizedPlatform, changed);
             }
         }
 
@@ -20,10 +33,11 @@ public sealed class CurrentDeviceService
         config.Devices[newId] = new DeviceDefinition
         {
             Id = newId,
-            Name = currentMachineName
+            Name = currentMachineName,
+            Platform = normalizedPlatform
         };
 
-        return new CurrentDeviceContext(newId, currentMachineName, true);
+        return new CurrentDeviceContext(newId, currentMachineName, true, normalizedPlatform, true);
     }
     public IReadOnlyList<CurrentDevicePathInfo> GetCurrentDevicePaths(GameDefinition game, string deviceId)
     {

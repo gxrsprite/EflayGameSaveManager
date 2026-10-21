@@ -103,7 +103,8 @@
                                     <DataTemplate x:DataType="vm:GameListItemViewModel">
                                         <Border Padding="12" Margin="0,0,0,8" Background="#F8FAFC" CornerRadius="12" BorderBrush="#E2E8F0" BorderThickness="1">
                                             <StackPanel Spacing="4">
-                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                                <TextBlock Text="{Binding Note}" IsVisible="{Binding HasNote}" TextWrapping="Wrap" Foreground="#5F7288"/>
                                                 <TextBlock Text="{Binding CloudBadge}" Foreground="#5F7288"/>
                                             </StackPanel>
                                         </Border>
@@ -139,9 +140,25 @@
                     <StackPanel Spacing="16">
                         <StackPanel Spacing="6">
                             <TextBlock Text="{Binding SelectedGameName}" FontSize="24" FontWeight="Bold" Foreground="#1B2A3A"/>
+                            <TextBlock Text="{Binding SelectedGameNote}" IsVisible="{Binding HasSelectedGameNote}" TextWrapping="Wrap" Foreground="#5F7288"/>
                             <TextBlock Text="{Binding SelectedGameStats}" Foreground="#5F7288"/>
                             <TextBlock Text="{Binding SelectedGameCloudState}" Foreground="#394B5A"/>
                         </StackPanel>
+
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12"
+                                IsVisible="{Binding HasSelectedGame}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{Binding Strings.GameInfoHint}" TextWrapping="Wrap" Foreground="#5F7288"/>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                    <TextBlock Text="{Binding Strings.GameChineseName}" VerticalAlignment="Center" Foreground="#1B2A3A"/>
+                                    <TextBox Grid.Column="1" Text="{Binding EditGameChineseName}" Watermark="{Binding Strings.GameChineseName}"/>
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                    <TextBlock Text="{Binding Strings.GameNote}" VerticalAlignment="Center" Foreground="#1B2A3A"/>
+                                    <TextBox Grid.Column="1" Text="{Binding EditGameNote}" Watermark="{Binding Strings.GameNote}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
 
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Command="{Binding UploadSelectedGameCurrentSaveCommand}"
@@ -325,6 +342,24 @@
                                                             Content="Select Path"
                                                             Command="{Binding ChoosePathCommand}" />
                                                 </Grid>
+                                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                    <TextBlock Text="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Strings.ExcludePatterns}"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="#5F7288"/>
+                                                    <TextBox Grid.Column="1"
+                                                             Text="{Binding ExcludePatterns}"
+                                                             Watermark="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Strings.ExcludePatternsWatermark}"/>
+                                                </Grid>
+                                                <TextBlock Text="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Strings.ExcludePatternsHint}"
+                                                           TextWrapping="Wrap"
+                                                           FontSize="11"
+                                                           Foreground="#8A9AAB"/>
+                                                <CheckBox IsChecked="{Binding ContentsOnly}"
+                                                          Content="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Strings.ContentsOnly}"/>
+                                                <TextBlock Text="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Strings.ContentsOnlyHint}"
+                                                           TextWrapping="Wrap"
+                                                           FontSize="11"
+                                                           Foreground="#8A9AAB"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -393,6 +428,8 @@
                             <StackPanel Spacing="10">
                                 <TextBlock Text="{Binding Strings.Game}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
                                 <TextBox Text="{Binding AddGameName}" Watermark="{Binding Strings.GameName}"/>
+                                <TextBox Text="{Binding AddGameChineseName}" Watermark="{Binding Strings.GameChineseName}"/>
+                                <TextBox Text="{Binding AddGameNote}" Watermark="{Binding Strings.GameNote}"/>
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                     <TextBox Text="{Binding AddGamePath}" Watermark="{Binding Strings.OptionalGameExecutable}"/>
                                     <Button Grid.Column="1"
@@ -445,6 +482,16 @@
                                                             Command="{Binding ChoosePathCommand}"
                                                             IsEnabled="{Binding CanChoosePath}" />
                                                 </Grid>
+                                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                    <TextBlock Text="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Strings.ExcludePatterns}"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="#5F7288"/>
+                                                    <TextBox Grid.Column="1"
+                                                             Text="{Binding ExcludePatterns}"
+                                                             Watermark="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Strings.ExcludePatternsWatermark}"/>
+                                                </Grid>
+                                                <CheckBox IsChecked="{Binding ContentsOnly}"
+                                                          Content="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Strings.ContentsOnly}"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>

@@ -15,5 +15,7 @@ Notes:
 - The app also normalizes the local mobile config on startup so duplicate same-type save units for different devices can be merged into one logical unit.
 - Cloud layout stays unchanged and continues to use `root_path/save_data/{gameName}/{timestamp}.zip` plus `Backups.json` and `sync_state.json`.
 - Android cloud sync is scoped to explicit Android device paths only; MAUI should not upload desktop fallback paths or app-private restore copies.
+- Shizuku calls use managed Java peers and reflected `Method.Accessible`, with no manual JNI reference deletion. Both process output pipes are drained concurrently.
+- Restricted-path upload staging fails visibly if any save unit cannot be read, restores redirected config paths on failure, and isolates each unit under a temporary staging directory.
 - Single-unit archives are expected to restore without creating an extra `0`/`1` wrapper folder in the target save directory.
 - Android SAF and document-tree bridging are still needed for the broadest storage compatibility on modern devices. This first pass is the MAUI shell and workflow baseline.

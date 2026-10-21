@@ -153,6 +153,57 @@ public sealed class CurrentDeviceAndArchiveTests
         }
     }
 
+    [Fact]
+    public void CreateCurrentDeviceArchive_CanReuseWorkingDirectoryWithReadOnlySourceFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var saveRoot = Path.Combine(root, "SAVEDATA");
+            Directory.CreateDirectory(saveRoot);
+            var saveFile = Path.Combine(saveRoot, "MEDITERRANEAN SEA - THE PATH TO AVALON.TRUSave");
+            File.WriteAllText(saveFile, "local-data");
+            File.SetAttributes(saveFile, File.GetAttributes(saveFile) | FileAttributes.ReadOnly);
+
+            var game = new GameSnapshot(
+                "TRU",
+                true,
+                [
+                    new ResolvedSaveUnit(
+                        0,
+                        SaveUnitType.Folder,
+                        true,
+                        [
+                            new ResolvedDevicePath("device-a", "DESKTOP-A", saveRoot)
+                        ])
+                ],
+                [],
+                [
+                    new CurrentDevicePathInfo(0, SaveUnitType.Folder, saveRoot, true)
+                ],
+                new CurrentDeviceGamePathInfo(string.Empty));
+
+            var service = new ArchiveTransferService();
+
+            service.CreateCurrentDeviceArchive(game, new CurrentDeviceContext("device-a", "DESKTOP-A", false), root);
+            var archivePath = service.CreateCurrentDeviceArchive(game, new CurrentDeviceContext("device-a", "DESKTOP-A", false), root);
+
+            using var archive = ZipFile.OpenRead(archivePath);
+            Assert.Contains(archive.Entries, entry => string.Equals(entry.FullName.Replace('\\', '/'), "0/SAVEDATA/MEDITERRANEAN SEA - THE PATH TO AVALON.TRUSave", StringComparison.Ordinal));
+            Assert.False((File.GetAttributes(Path.Combine(root, "content", "0", "SAVEDATA", "MEDITERRANEAN SEA - THE PATH TO AVALON.TRUSave")) & FileAttributes.ReadOnly) != 0);
+        }
+        finally
+        {
+            ClearReadOnlyFiles(root);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static string ReadZipComment(string archivePath)
     {
         var bytes = File.ReadAllBytes(archivePath);
@@ -366,10 +417,75 @@ public sealed class CurrentDeviceAndArchiveTests
         }
         finally
         {
+            ClearReadOnlyFiles(root);
             if (Directory.Exists(root))
             {
                 Directory.Delete(root, recursive: true);
             }
+        }
+    }
+
+    [Fact]
+    public async Task SaveBackupService_BackupAsync_DoesNotKeepReadOnlyAttributeOnFolderFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var saveRoot = Path.Combine(root, "SAVEDATA");
+            Directory.CreateDirectory(saveRoot);
+            var saveFile = Path.Combine(saveRoot, "MEDITERRANEAN SEA - THE PATH TO AVALON.TRUSave");
+            File.WriteAllText(saveFile, "local-data");
+            File.SetAttributes(saveFile, File.GetAttributes(saveFile) | FileAttributes.ReadOnly);
+
+            var game = new GameSnapshot(
+                "TRU",
+                true,
+                [
+                    new ResolvedSaveUnit(
+                        7,
+                        SaveUnitType.Folder,
+                        true,
+                        [
+                            new ResolvedDevicePath("device-a", "DESKTOP-A", saveRoot)
+                        ])
+                ],
+                [],
+                [
+                    new CurrentDevicePathInfo(7, SaveUnitType.Folder, saveRoot, true)
+                ],
+                new CurrentDeviceGamePathInfo(string.Empty));
+
+            var backupRoot = Path.Combine(root, "backups");
+            var service = new SaveBackupService();
+
+            var backupPath = await service.BackupAsync(game, backupRoot);
+            var backupFile = Path.Combine(backupPath, "DESKTOP-A", "7", "SAVEDATA", "MEDITERRANEAN SEA - THE PATH TO AVALON.TRUSave");
+
+            Assert.True(File.Exists(backupFile));
+            Assert.False((File.GetAttributes(backupFile) & FileAttributes.ReadOnly) != 0);
+        }
+        finally
+        {
+            ClearReadOnlyFiles(root);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static void ClearReadOnlyFiles(string root)
+    {
+        if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
         }
     }
 }

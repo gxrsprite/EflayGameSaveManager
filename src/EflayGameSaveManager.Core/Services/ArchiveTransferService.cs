@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using EflayGameSaveManager.Core.Models;
+using EflayGameSaveManager.Core.Services.GamePlugins;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 
@@ -38,6 +39,21 @@ public sealed class ArchiveTransferService
             return includedUnits[0].CurrentPath!.Path;
         }
 
+        if (includedUnits.Length == 0)
+        {
+            var checkedPaths = game.SaveUnits
+                .SelectMany(saveUnit => saveUnit.Paths
+                    .Where(path => string.Equals(path.DeviceId, currentDevice.DeviceId, StringComparison.Ordinal))
+                    .Select(path => $"[{saveUnit.UnitType}] {(string.IsNullOrWhiteSpace(path.Path) ? "<empty>" : path.Path)}"))
+                .ToArray();
+            var detail = checkedPaths.Length == 0
+                ? "no save paths are configured for this device"
+                : string.Join("; ", checkedPaths);
+            throw new InvalidOperationException(
+                $"No save data was found for '{game.Name}' on device '{currentDevice.DeviceName}'. Checked: {detail}. " +
+                "Nothing was archived or uploaded — verify the save paths exist and contain files.");
+        }
+
         foreach (var item in includedUnits)
         {
             var saveUnit = item.SaveUnit;
@@ -47,6 +63,7 @@ public sealed class ArchiveTransferService
                 continue;
 
             var stagedPath = Path.Combine(stagingDirectory, saveUnit.Id.ToString());
+            var exclude = saveUnit.Exclude;
 
             if (saveUnit.UnitType == SaveUnitType.WinRegistry)
             {
@@ -54,12 +71,28 @@ public sealed class ArchiveTransferService
             }
             else if (saveUnit.UnitType == SaveUnitType.File)
             {
+                var fileName = Path.GetFileName(currentPath.Path);
+                if (SavePathFilter.IsExcluded(fileName, fileName, exclude))
+                {
+                    AppLogger.Info($"Backup skip excluded file: {currentPath.Path}");
+                    continue;
+                }
+
                 Directory.CreateDirectory(stagedPath);
-                FileCopyHelper.CopyFile(currentPath.Path, Path.Combine(stagedPath, Path.GetFileName(currentPath.Path)));
+                FileCopyHelper.CopyFile(currentPath.Path, Path.Combine(stagedPath, fileName));
             }
             else
             {
-                CopyDirectoryIncludingBaseDirectory(currentPath.Path, stagedPath);
+                if (saveUnit.ContentsOnly)
+                {
+                    // Stable wrapper name for contents-only units: folder names on the
+                    // source/target devices may differ, but archive layout stays "content/*".
+                    CopyDirectoryContents(currentPath.Path, Path.Combine(stagedPath, "content"), exclude);
+                }
+                else
+                {
+                    CopyDirectoryIncludingBaseDirectory(currentPath.Path, stagedPath, exclude);
+                }
             }
         }
 
@@ -69,15 +102,40 @@ public sealed class ArchiveTransferService
             FileCopyHelper.DeleteFileIfExists(archivePath);
         }
 
+        // Per-game format plugin: store canonical (portable) saves in the archive.
+        var backupPlugin = GameSaveFormatPlugins.ForGame(game);
+        if (backupPlugin is not null)
+        {
+            GameSaveFormatPlugins.NormalizeStaging(backupPlugin, stagingDirectory);
+        }
+
         ZipFile.CreateFromDirectory(stagingDirectory, archivePath, CompressionLevel.Optimal, includeBaseDirectory: false);
+        using (var archive = ZipFile.OpenRead(archivePath))
+        {
+            if (archive.Entries.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Archive for '{game.Name}' on device '{currentDevice.DeviceName}' is empty — the save directories exist but contain no files. " +
+                    "Nothing was archived or uploaded.");
+            }
+        }
+
         WriteZipComment(archivePath, RgsmArchiveV2Comment);
         return archivePath;
     }
 
+    /// <summary>
+    /// Restores an archive into the current device's save paths.
+    /// <paramref name="targetPlatformOverride"/> lets a caller that temporarily redirects
+    /// the destination (e.g. the Android restore path going through a cache folder) pin the
+    /// encoding platform resolved from the real device, so the format never degrades to
+    /// desktop JSON on a mobile target.
+    /// </summary>
     public void RestoreCurrentDeviceArchive(
         string archivePath,
         GameSnapshot game,
-        CurrentDeviceContext currentDevice)
+        CurrentDeviceContext currentDevice,
+        GameSaveTargetPlatform? targetPlatformOverride = null)
     {
         // Zip type: save downloaded zip directly to target path without extraction
         var zipUnits = game.SaveUnits
@@ -119,6 +177,13 @@ public sealed class ArchiveTransferService
             ExtractArchive(archivePath, extractRoot);
             AppLogger.Info($"Restore extracted archive to {extractRoot}");
 
+            // Per-game format plugin: convert canonical saves into the target platform encoding.
+            var restorePlugin = GameSaveFormatPlugins.ForGame(game);
+            if (restorePlugin is not null)
+            {
+                GameSaveFormatPlugins.EncodeStaging(restorePlugin, extractRoot, game, currentDevice, targetPlatformOverride);
+            }
+
             foreach (var localUnit in game.SaveUnits)
             {
                 var localPath = localUnit.Paths.FirstOrDefault(path => string.Equals(path.DeviceId, currentDevice.DeviceId, StringComparison.Ordinal));
@@ -147,11 +212,18 @@ public sealed class ArchiveTransferService
                     }
                     else if (localUnit.UnitType == SaveUnitType.File && File.Exists(localPath.Path))
                     {
-                        FileCopyHelper.DeleteFileIfExists(localPath.Path);
+                        if (!SavePathFilter.IsExcluded(
+                                Path.GetFileName(localPath.Path),
+                                Path.GetFileName(localPath.Path),
+                                localUnit.Exclude))
+                        {
+                            FileCopyHelper.DeleteFileIfExists(localPath.Path);
+                        }
                     }
                     else if (localUnit.UnitType == SaveUnitType.Folder && Directory.Exists(localPath.Path))
                     {
-                        Directory.Delete(localPath.Path, recursive: true);
+                        // Never remove locally-owned files such as settings.json.
+                        SavePathFilter.DeleteExcluding(localPath.Path, localUnit.Exclude);
                     }
                 }
 
@@ -165,6 +237,13 @@ public sealed class ArchiveTransferService
                 }
                 else if (localUnit.UnitType == SaveUnitType.File)
                 {
+                    var targetName = Path.GetFileName(localPath.Path);
+                    if (SavePathFilter.IsExcluded(targetName, targetName, localUnit.Exclude))
+                    {
+                        AppLogger.Info($"Restore skip excluded file: {localPath.Path}");
+                        continue;
+                    }
+
                     var sourceFile = Directory.EnumerateFiles(sourceRoot).FirstOrDefault();
                     if (sourceFile is null)
                     {
@@ -178,9 +257,14 @@ public sealed class ArchiveTransferService
                 }
                 else
                 {
-                    var actualSource = ResolveFolderContentRoot(sourceRoot, localPath.Path);
-                    CopyDirectory(actualSource, localPath.Path);
-                    AppLogger.Info($"Restore unit {localUnit.Id}: copied folder {actualSource} -> {localPath.Path}");
+                    // "content" is an archive-internal wrapper only: its children always go
+                    // straight into the target folder. Never create target/content.
+                    var contentFolder = Path.Combine(sourceRoot, "content");
+                    var actualSource = Directory.Exists(contentFolder)
+                        ? contentFolder // stable contents-only layout (flag-independent)
+                        : (localUnit.ContentsOnly ? sourceRoot : ResolveFolderContentRoot(sourceRoot, localPath.Path));
+                    CopyDirectory(actualSource, localPath.Path, localUnit.Exclude);
+                    AppLogger.Info($"Restore unit {localUnit.Id}: copied folder {actualSource} -> {localPath.Path} (contentsOnly={localUnit.ContentsOnly})");
                 }
             }
 
@@ -255,14 +339,15 @@ public sealed class ArchiveTransferService
         var childFiles = Directory.GetFiles(sourceRoot);
         if (childFiles.Length == 0 && childDirectories.Length == 1)
         {
-            var targetDirectoryName = Path.GetFileName(targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            var childDirectoryName = Path.GetFileName(childDirectories[0]);
-            if (string.Equals(childDirectoryName, targetDirectoryName, StringComparison.OrdinalIgnoreCase))
+            var targetName = Path.GetFileName(targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.Equals(Path.GetFileName(childDirectories[0]), targetName, StringComparison.OrdinalIgnoreCase))
             {
                 return childDirectories[0];
             }
         }
 
+        // Name differs: keep the archived original wrapper (folder mode), so e.g.
+        // restoring saves/ to target user/ results in user/saves/ rather than user/.
         return sourceRoot;
     }
 
@@ -283,22 +368,10 @@ public sealed class ArchiveTransferService
         }
     }
 
-    private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
-    {
-        Directory.CreateDirectory(destinationDirectory);
-
-        foreach (var file in Directory.GetFiles(sourceDirectory))
-        {
-            FileCopyHelper.CopyFile(file, Path.Combine(destinationDirectory, Path.GetFileName(file)));
-        }
-
-        foreach (var directory in Directory.GetDirectories(sourceDirectory))
-        {
-            CopyDirectory(directory, Path.Combine(destinationDirectory, Path.GetFileName(directory)));
-        }
-    }
-
-    private static void CopyDirectoryIncludingBaseDirectory(string sourceDirectory, string destinationParentDirectory)
+    private static void CopyDirectoryIncludingBaseDirectory(
+        string sourceDirectory,
+        string destinationParentDirectory,
+        IReadOnlyList<string>? exclude = null)
     {
         var directoryName = Path.GetFileName(sourceDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         if (string.IsNullOrWhiteSpace(directoryName))
@@ -306,7 +379,39 @@ public sealed class ArchiveTransferService
             directoryName = new DirectoryInfo(sourceDirectory).Name;
         }
 
-        CopyDirectory(sourceDirectory, Path.Combine(destinationParentDirectory, directoryName));
+        CopyDirectory(sourceDirectory, Path.Combine(destinationParentDirectory, directoryName), exclude);
+    }
+
+    /// <summary>
+    /// Copies a directory's children directly into the destination without creating a
+    /// base directory, so the folder's own name never enters the archive.
+    /// </summary>
+    private static void CopyDirectoryContents(
+        string sourceDirectory,
+        string destinationDirectory,
+        IReadOnlyList<string>? exclude = null)
+    {
+        SavePathFilter.CopyDirectory(
+            sourceDirectory,
+            destinationDirectory,
+            exclude,
+            (source, destination) => FileCopyHelper.CopyFile(source, destination));
+    }
+
+    /// <summary>
+    /// Copies a directory tree, optionally skipping files that match the unit's
+    /// exclusion patterns (e.g. device-local <c>settings.json</c>).
+    /// </summary>
+    private static void CopyDirectory(
+        string sourceDirectory,
+        string destinationDirectory,
+        IReadOnlyList<string>? exclude = null)
+    {
+        SavePathFilter.CopyDirectory(
+            sourceDirectory,
+            destinationDirectory,
+            exclude,
+            (source, destination) => FileCopyHelper.CopyFile(source, destination));
     }
 
     public string NormalizeZipArchiveForMobileRestore(string archivePath, string workingDirectory)

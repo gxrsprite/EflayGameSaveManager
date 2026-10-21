@@ -3,6 +3,7 @@ package com.eflay.gamesavemanager.ui.component
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -21,9 +22,13 @@ fun GameDetailPanel(
     selectedTarget: SaveUnitTargetOption?,
     editSavePath: String,
     editGamePath: String,
+    editExcludePatterns: String,
+    editContentsOnly: Boolean,
     onTargetChange: (SaveUnitTargetOption) -> Unit,
     onEditSavePathChange: (String) -> Unit,
     onEditGamePathChange: (String) -> Unit,
+    onEditExcludePatternsChange: (String) -> Unit,
+    onEditContentsOnlyChange: (Boolean) -> Unit,
     onPickEditFile: () -> Unit,
     onPickEditFolder: () -> Unit,
     onSavePaths: () -> Unit,
@@ -139,6 +144,39 @@ fun GameDetailPanel(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+
+                    OutlinedTextField(
+                        value = editExcludePatterns,
+                        onValueChange = onEditExcludePatternsChange,
+                        label = { Text("Exclude patterns (e.g. settings*; Prefs.dict)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Text(
+                        text = "Matching files are never packed on backup and never overwritten on restore.",
+                        fontSize = 11.sp,
+                        color = MutedTextColor
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Switch(
+                            checked = editContentsOnly,
+                            onCheckedChange = onEditContentsOnlyChange
+                        )
+                        Column {
+                            Text("只同步文件夹内容", fontSize = 13.sp)
+                            Text(
+                                "忽略文件夹名，两边目录名不同也能对齐（如 PC 的 saves 与手机的 user）",
+                                fontSize = 11.sp,
+                                color = MutedTextColor
+                            )
+                        }
+                    }
 
                     Button(
                         onClick = onSavePaths,

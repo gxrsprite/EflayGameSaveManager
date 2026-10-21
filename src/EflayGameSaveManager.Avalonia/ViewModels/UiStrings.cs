@@ -75,6 +75,21 @@ public sealed class UiStrings
         AlwaysSync = english ? "Always Sync" : "始终同步";
         SaveS3Settings = english ? "Save S3 Settings" : "保存 S3 设置";
         LanguageSaved = english ? "Interface language saved." : "界面语言已保存。";
+        SelectGame = english ? "Select a game" : "请选择游戏";
+        GameChineseName = english ? "Chinese name" : "中文名";
+        GameNote = english ? "Note" : "备注";
+        GameInfoHint = english
+            ? "Chinese name and note are saved together with “Save Current Device Settings”. In Chinese UI the list and title prefer the Chinese name."
+            : "中文名与备注会随“保存当前设备设置”一起保存；中文界面下列表与标题优先显示中文名。";
+        ExcludePatterns = english ? "Exclude patterns" : "排除规则";
+        ExcludePatternsHint = english
+            ? "Semicolon-separated wildcards for device-local files, e.g. settings*; Prefs.dict. Matching files are never packed on backup and never overwritten on restore."
+            : "分号分隔的通配符，用于设备本地文件，例如 settings*; Prefs.dict。匹配的文件备份时不打包、恢复时不覆盖。";
+        ExcludePatternsWatermark = english ? "e.g. settings*; Prefs.dict" : "例如 settings*; Prefs.dict";
+        ContentsOnly = english ? "Sync folder contents only" : "只同步文件夹内容";
+        ContentsOnlyHint = english
+            ? "Ignores the folder's own name so devices with different directory names still line up (e.g. PC \"saves\" vs Android \"user\")."
+            : "忽略文件夹自身名称，两边目录名不同也能对齐（例如 PC 的 saves 与手机的 user）。";
     }
 
     public string WindowTitle { get; }
@@ -145,6 +160,15 @@ public sealed class UiStrings
     public string AlwaysSync { get; }
     public string SaveS3Settings { get; }
     public string LanguageSaved { get; }
+    public string SelectGame { get; }
+    public string GameChineseName { get; }
+    public string GameNote { get; }
+    public string GameInfoHint { get; }
+    public string ExcludePatterns { get; }
+    public string ExcludePatternsHint { get; }
+    public string ExcludePatternsWatermark { get; }
+    public string ContentsOnly { get; }
+    public string ContentsOnlyHint { get; }
 
     public static UiStrings Create(string language) =>
         new(string.Equals(language, AppLanguage.English, StringComparison.OrdinalIgnoreCase));

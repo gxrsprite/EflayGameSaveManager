@@ -3,6 +3,120 @@
   "backup_path": "./save_data",
   "games": [
     {
+      "name": "NFS16",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\NFSTR\\settings"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\NFS16\\Need For Speed The Run.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Dirt2",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\My Games\\DiRT2\\savegame",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\My Games\\DiRT2\\savegame"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\Dirt 2\\dirt2.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\Dirt 2\\dirt2.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "NFS14",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\Criterion Games\\Need for Speed(TM) Hot Pursuit\\Save"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\NFS14\\NFS11.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "SlayTheSpire2",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winAppData>\\SlayTheSpire2\\steam\\76561198009066172\\modded\\profile1\\saves",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\SlayTheSpire2\\steam\\76561199782380650\\modded\\profile1\\saves"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\Slay.the.Spire.2.Early.Access\\SlayTheSpire2.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\Slay.the.Spire.2\\SlayTheSpire2.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "WRC4",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\Milestone\\WRC4\\Saves"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "WRC5",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\WRC5\\3DMGAME\\3DMGAME\\remote",
+            "629931f5-929d-4713-9fdf-6497c45be811": "D:\\LocalGame\\WRC5\\3DMGAME\\3DMGAME\\remote",
+            "c9ff7b70-769d-4152-856e-a4ee5bc53d5d": "F:\\WRC5\\3DMGAME\\3DMGAME\\remote"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\LocalGame\\WRC5\\WRC5.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\WRC5\\WRC5.exe",
+        "c9ff7b70-769d-4152-856e-a4ee5bc53d5d": "F:\\WRC5\\WRC5.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
       "name": "Stellar Blade",
       "save_paths": [
         {
@@ -104,11 +218,11 @@
       "root_path": "/game-save-manager",
       "backend": {
         "type": "S3",
-        "endpoint": "",
-        "bucket": "",
-        "region": "",
-        "access_key_id": "",
-        "secret_access_key": ""
+        "endpoint": "http://124.220.236.154:9000",
+        "bucket": "eflay-game-save",
+        "region": "eflay",
+        "access_key_id": "minio",
+        "secret_access_key": "12345678"
       },
       "max_concurrency": 1
     },
@@ -171,7 +285,15 @@
     "c9ff7b70-769d-4152-856e-a4ee5bc53d5d": {
       "id": "c9ff7b70-769d-4152-856e-a4ee5bc53d5d",
       "name": "LOCALHOST"
-    }
+    },
+    "629931f5-929d-4713-9fdf-6497c45be811": {
+      "id": "629931f5-929d-4713-9fdf-6497c45be811",
+      "name": "EflayHC"
+    },
+    "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": {
+      "id": "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68",
+      "name": "EFLAYPC"
+    },
     "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": {
       "id": "cd0d180b-fd0e-416b-bb12-11c9b18fdd50",
       "name": "Android"

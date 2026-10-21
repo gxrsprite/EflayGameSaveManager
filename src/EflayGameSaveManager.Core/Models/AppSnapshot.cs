@@ -13,13 +13,17 @@ public sealed record GameSnapshot(
     IReadOnlyList<ResolvedSaveUnit> SaveUnits,
     IReadOnlyList<ResolvedGamePath> GamePaths,
     IReadOnlyList<CurrentDevicePathInfo> CurrentDevicePaths,
-    CurrentDeviceGamePathInfo CurrentDeviceGamePath);
+    CurrentDeviceGamePathInfo CurrentDeviceGamePath,
+    string ChineseName = "",
+    string Note = "");
 
 public sealed record ResolvedSaveUnit(
     int Id,
     SaveUnitType UnitType,
     bool DeleteBeforeApply,
-    IReadOnlyList<ResolvedDevicePath> Paths);
+    IReadOnlyList<ResolvedDevicePath> Paths,
+    IReadOnlyList<string>? Exclude = null,
+    bool ContentsOnly = false);
 
 public sealed record ResolvedGamePath(string DeviceId, string DeviceName, string Path);
 

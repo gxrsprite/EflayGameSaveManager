@@ -3,6 +3,848 @@
   "backup_path": "./save_data",
   "games": [
     {
+      "name": "DYNASTY WARRIORS ORIGINS",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\KoeiTecmo\\DYNASTY WARRIORS ORIGINS\\Saved\\SaveGames\\4660",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\KoeiTecmo\\DYNASTY WARRIORS ORIGINS\\Saved\\SaveGames\\4660"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\DWORIGINS\\DWORIGINS.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\DWORIGINS\\DWORIGINS.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "FINAL FANTASY VII REBIRTH",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\My Games\\FINAL FANTASY VII REBIRTH\\Steam\\76561197960271872",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\My Games\\FINAL FANTASY VII REBIRTH\\Steam\\76561197960271872"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\FINAL FANTASY VII REBIRTH\\ff7rebirth.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\FINAL FANTASY VII REBIRTH\\ff7rebirth.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Horizon Forbidden West",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\Horizon Forbidden West Complete Edition\\76561198551745009",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\Horizon Forbidden West Complete Edition\\76561198551745009"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Expedition 33",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winLocalAppData>\\Sandfall\\Saved\\SaveGames\\76561197960271872",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppData>\\Sandfall\\Saved\\SaveGames\\76561197960271872"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\Expedition 33\\Expedition33_Steam.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\Expedition 33\\Expedition33_Steam.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "GRID2019",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "C:\\Users\\Public\\Documents\\Steam\\CODEX\\703860",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "C:\\Users\\Public\\Documents\\Steam\\CODEX\\703860"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\GRID (2019)\\Grid_dx12.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\GRID (2019)\\Grid_dx12.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "惩戒魅魔",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winLocalAppDataLow>\\L2 Games\\She Will Punish Them\\4868440",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppDataLow>\\L2 Games\\She Will Punish Them\\4868440"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\SteamLibrary\\SteamApps\\common\\She Will Punish Them\\She Will Punish Them.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "E:\\SteamLibrary\\SteamApps\\common\\She Will Punish Them\\She Will Punish Them.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "刺客信条英灵殿",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\savegames\\1b525578-97ee-4045-a30d-060a7a5fec94\\7013",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\savegames\\1b525578-97ee-4045-a30d-060a7a5fec94\\7013"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "NFS15",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\SHIFT 2 UNLEASHED\\profiles",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\SHIFT 2 UNLEASHED\\profiles"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\nfs15\\A1290 15\\SHIFT2U.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "E:\\localgame\\nfs15\\A1290 15\\SHIFT2U.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Shin Sangokumusou 7 Key Setting",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "File",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\TecmoKoei\\Shin Sangokumusou 7 TC\\inputmap2.dat",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\TecmoKoei\\Shin Sangokumusou 7 TC\\inputmap2.dat"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "SilentHill2 Remake",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppData>\\SilentHill2\\Saved\\SaveGames\\76561197960271872",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winLocalAppData>\\SilentHill2\\Saved\\SaveGames\\76561197960271872"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\SH2R\\SHProto.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\SH2R\\SHProto.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Frostpunk2",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppData>\\11bitstudios\\Frostpunk2\\Steam\\Saved\\SaveGames",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winLocalAppData>\\11bitstudios\\Frostpunk2\\Steam\\Saved\\SaveGames"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\Frostpunk2\\Frostpunk2.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\Frostpunk2\\Frostpunk2.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "God of War 5",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<home>\\Saved Games\\God of War Ragnarök",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<home>\\Saved Games\\God of War Ragnarök"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "I:\\localgame\\God of War Ragnarok\\GoWR.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "I:\\localgame\\God of War Ragnarok\\GoWR.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Cyberpunk 2077",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<home>\\Saved Games\\CD Projekt Red\\Cyberpunk 2077",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<home>\\Saved Games\\CD Projekt Red\\Cyberpunk 2077"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "I:\\localgame\\Cyberpunk2077\\bin\\x64\\Cyberpunk2077.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "I:\\localgame\\Cyberpunk2077\\bin\\x64\\Cyberpunk2077.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Palworld",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppData>\\Pal\\Saved\\SaveGames\\0\\D9490CA34AFDC4B7652D9AAC5B218E88",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winLocalAppData>\\Pal\\Saved\\SaveGames\\0\\D9490CA34AFDC4B7652D9AAC5B218E88"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\Palworld\\Palworld.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\Palworld\\Palworld.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Shin Sangokumusou 7",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "File",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\TecmoKoei\\Shin Sangokumusou 7 TC\\Savedata\\save.dat",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\TecmoKoei\\Shin Sangokumusou 7 TC\\Savedata\\save.dat"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "E:\\localgame\\zhensan7\\Launch.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\zhensan7\\Launch.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "One Piece Pirate Warriors 3",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\BNE\\One Piece Pirate Warriors 3\\SAVEDATA",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\BNE\\One Piece Pirate Warriors 3\\SAVEDATA"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "One Piece Pirate Warriors 4",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winLocalAppData>\\BANDAI NAMCO Entertainment\\One Piece Pirate Warriors 4\\Saved\\SaveGames\\6144",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppData>\\BANDAI NAMCO Entertainment\\One Piece Pirate Warriors 4\\Saved\\SaveGames\\-1448976925"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\OPPW4\\OPPW4.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\One Piece Pirate Warriors 4 Ultimate Edition\\OPPW4.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Shin chan Shiro and the Coal Town",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\My Games\\Shin chan Shiro and the Coal Town\\Steam",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\My Games\\Shin chan Shiro and the Coal Town\\Steam"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\Shin chan Shiro and the Coal Town\\Shin chan Shiro and the Coal Town.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "E:\\localgame\\Shin chan Shiro and the Coal Town\\Shin chan Shiro and the Coal Town.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "GRID Autosport",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\GRID Autosport\\3DMGAME\\3DMGAME",
+            "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\GRID Autosport\\3DMGAME\\3DMGAME"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\GRID Autosport\\GRIDAutosport_avx.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "H:\\LocalGame\\GRID Autosport\\GRIDAutosport_avx.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "死亡细胞",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winAppData>\\Roaming\\Goldberg SteamEmu Saves\\588650\\remote",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\Roaming\\Goldberg SteamEmu Saves\\588650\\remote"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\Dead Cells V35\\deadcells.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "E:\\localgame\\Dead Cells V35\\deadcells.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "NFS16",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\NFSTR\\settings"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\NFS16\\Need For Speed The Run.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "咩咩启示录",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppDataLow>\\Massive Monster\\Cult Of The Lamb\\saves"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\Cult of the Lamb\\Cult Of The Lamb.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "NFS17",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\Criterion Games\\Need For Speed(TM) Most Wanted\\Save\\0"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\NFS17\\NFS13.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "中国式相亲",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppDataLow>\\Bolang2\\ChineseDating"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\中国式相亲\\ChineseDating\\ChineseDating.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "甜蜜女友2+",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winAppData>\\あざらしそふと\\【心愿屋汉化组】甜蜜女友2"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\甜蜜女友2\\甜蜜女友2汉化补丁.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Hollow Knight Silksong",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppDataLow>\\Team Cherry\\Hollow Knight Silksong"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\Hollow Knight Silksong\\Hollow Knight Silksong.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "P4",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\P4G\\steam_settings\\1113000\\remote"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\P4G\\P4G.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "MetaphorReFantazio",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winAppData>\\SEGA\\METAPHOR\\Steam"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\MetaphorReFantazio\\METAPHOR.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "FAIRY TAIL 2",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\KoeiTecmo\\FAIRY TAIL 2",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\KoeiTecmo\\FAIRY TAIL 2"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "",
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\FAIRY TAIL 2\\FAIRY_TAIL_2.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "DevilMayCry5",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "C:\\Users\\Public\\Documents\\Steam\\CODEX\\601150\\remote\\win64_save",
+            "629931f5-929d-4713-9fdf-6497c45be811": "C:\\Users\\Public\\Documents\\Steam\\CODEX\\601150\\remote\\win64_save"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "",
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\Devil May Cry 5\\DevilMayCry5.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Grid Legends",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "D:\\Program Files (x86)\\Steam\\userdata\\162099984\\1307710\\remote",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\Program Files (x86)\\Steam\\userdata\\162099984\\1307710\\"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "C:\\Users\\eflay\\Desktop\\GRID Legends.url",
+        "629931f5-929d-4713-9fdf-6497c45be811": "C:\\Users\\eflay\\Desktop\\GRID Legends.url"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "ONE PIECE ODYSSEY",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winLocalAppData>\\BANDAI NAMCO Entertainment\\ONE PIECE ODYSSEY\\Saved\\SaveGames",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winLocalAppData>\\BANDAI NAMCO Entertainment\\ONE PIECE ODYSSEY\\Saved\\SaveGames"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\ONE PIECE ODYSSEY\\odyssey.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\ONE PIECE ODYSSEY\\odyssey.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Dirt5",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winAppData>\\.1911\\00000000-0000-0000-0000-000071f5c78c\\Dirt5\\profile",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\.1911\\00000000-0000-0000-0000-000071f5c78c\\Dirt5\\profile"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\DIRT 5\\game_release.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\DIRT 5\\game_release.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Dirt2",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\My Games\\DiRT2\\savegame",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\My Games\\DiRT2\\savegame"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\Dirt 2\\dirt2.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\Dirt 2\\dirt2.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "NFS14",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\Criterion Games\\Need for Speed(TM) Hot Pursuit\\Save"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\NFS14\\NFS11.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "WRC8",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\My Games\\WRC8\\SAVEDATA",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winDocuments>\\My Games\\WRC8\\SAVEDATA"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\WRC8\\WRC8.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\WRC8"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "WRCG",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\FLT\\1953520\\remote",
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winAppData>\\FLT\\1953520\\remote"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\WRC.Generations\\WRCG.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\localgame\\WRC.Generations\\WRCG.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "空之轨迹1st",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<home>\\Saved Games\\CLE\\Sora_no_Kiseki_the_1st\\savedata",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<home>\\Saved Games\\CLE\\Sora_no_Kiseki_the_1st\\savedata"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\Sora No Kiseki the 1st\\sora_1st.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": ""
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "Dirt Rally 2",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winPublic>\\Documents\\Steam\\CODEX\\690790\\remote"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\LocalGame\\dirtrally2\\dirtrally2.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "SlayTheSpire2",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "629931f5-929d-4713-9fdf-6497c45be811": "<winAppData>\\SlayTheSpire2\\steam\\76561198009066172\\modded\\profile1\\saves",
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\SlayTheSpire2\\steam\\76561199782380650\\modded\\profile1\\saves"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "E:\\localgame\\Slay.the.Spire.2.Early.Access\\SlayTheSpire2.exe",
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\localgame\\Slay.the.Spire.2\\SlayTheSpire2.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "RESIDENT EVIL 9",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\GSE Saves\\3764200\\remote\\win64_save"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\RESIDENT EVIL requiem BIOHAZARD requiem\\RESIDENT EVIL requiem BIOHAZARD requiem\\dse universal launcher 1.2.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "WRC9",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winDocuments>\\My Games\\WRC9\\SAVEDATA"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\WRC9\\WRC9.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "WRC4",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\Milestone\\WRC4\\Saves"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
+      "name": "WRC5",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\WRC5\\3DMGAME\\3DMGAME\\remote",
+            "629931f5-929d-4713-9fdf-6497c45be811": "D:\\LocalGame\\WRC5\\3DMGAME\\3DMGAME\\remote",
+            "c9ff7b70-769d-4152-856e-a4ee5bc53d5d": "F:\\WRC5\\3DMGAME\\3DMGAME\\remote"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {
+        "629931f5-929d-4713-9fdf-6497c45be811": "D:\\LocalGame\\WRC5\\WRC5.exe",
+        "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "H:\\LocalGame\\WRC5\\WRC5.exe",
+        "c9ff7b70-769d-4152-856e-a4ee5bc53d5d": "F:\\WRC5\\WRC5.exe"
+      },
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": true
+    },
+    {
       "name": "Stellar Blade",
       "save_paths": [
         {
@@ -21,14 +863,37 @@
       "cloud_sync_enabled": true
     },
     {
+      "name": "测试文件和注册表",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "File",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "C:\\Users\\eflay\\AppData\\Local\\SB\\Saved\\SaveGames\\76561197960285355\\StellarBladeSave00.sav"
+          },
+          "delete_before_apply": false
+        },
+        {
+          "id": 1,
+          "unit_type": "WinRegistry",
+          "paths": {
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "HKEY_CURRENT_USER\\Software\\DAUM"
+          },
+          "delete_before_apply": false
+        }
+      ],
+      "game_paths": {},
+      "next_save_unit_id": 2,
+      "cloud_sync_enabled": true
+    },
+    {
       "name": "DuskLight",
       "save_paths": [
         {
           "id": 0,
           "unit_type": "Folder",
           "paths": {
-            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\TwilitRealm\\Dusklight\\EUR\\Card A",
-            "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": "/storage/emulated/0/dustlight/appdata/EUR/Card A"
+            "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": "<winAppData>\\TwilitRealm\\Dusklight\\EUR\\Card A"
           },
           "delete_before_apply": false
         }
@@ -56,9 +921,7 @@
           "paths": {
             "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": ""
           },
-          "linked_unit_ids": [
-            0
-          ]
+          "linked_unit_ids": [0]
         }
       ],
       "game_paths": {},
@@ -82,9 +945,7 @@
           "paths": {
             "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": ""
           },
-          "linked_unit_ids": [
-            0
-          ]
+          "linked_unit_ids": [0]
         }
       ],
       "game_paths": {},
@@ -104,11 +965,11 @@
       "root_path": "/game-save-manager",
       "backend": {
         "type": "S3",
-        "endpoint": "",
-        "bucket": "",
-        "region": "",
-        "access_key_id": "",
-        "secret_access_key": ""
+        "endpoint": "http://124.220.236.154:9000",
+        "bucket": "eflay-game-save",
+        "region": "eflay",
+        "access_key_id": "minio",
+        "secret_access_key": "12345678"
       },
       "max_concurrency": 1
     },
@@ -132,8 +993,26 @@
   },
   "favorites": [
     {
-      "node_id": "9da5dd12-0951-4bfb-bae4-d357610d4902",
-      "label": "DuskLight",
+      "node_id": "b816e7c1-8074-452f-af0e-7fe476bc3502",
+      "label": "WRCG",
+      "is_leaf": true,
+      "children": null
+    },
+    {
+      "node_id": "433c08e5-ea7b-4a07-be08-29646e352e87",
+      "label": "SlayTheSpire2",
+      "is_leaf": true,
+      "children": null
+    },
+    {
+      "node_id": "4b9f353e-36f0-432d-b4d9-9c5dbf7c32f6",
+      "label": "RESIDENT EVIL 9",
+      "is_leaf": true,
+      "children": null
+    },
+    {
+      "node_id": "355fb04f-fa1f-4365-b9ef-198b3d2d7be4",
+      "label": "Dirt2",
       "is_leaf": true,
       "children": null
     }
@@ -174,11 +1053,11 @@
     },
     "629931f5-929d-4713-9fdf-6497c45be811": {
       "id": "629931f5-929d-4713-9fdf-6497c45be811",
-      "name": "GamePad"
+      "name": "EflayHC"
     },
     "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68": {
       "id": "5c13b715-9b50-4ddf-be58-4bb7dbdc3d68",
-      "name": "PC"
+      "name": "EFLAYPC"
     },
     "cd0d180b-fd0e-416b-bb12-11c9b18fdd50": {
       "id": "cd0d180b-fd0e-416b-bb12-11c9b18fdd50",

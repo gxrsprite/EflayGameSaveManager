@@ -1,210 +1,124 @@
 using Android.Runtime;
-using Java.Interop;
+using JavaClass = Java.Lang.Class;
+using JavaObject = Java.Lang.Object;
 
 namespace EflayGameSaveManager.Maui.Platforms.Android;
 
 /// <summary>
-/// JNI-based interop with the Shizuku Java API (rikka.shizuku.Shizuku).
-/// Uses reflection to call private newProcess() for privileged shell commands.
+/// Shizuku bridge using managed Java peers so the Android runtime owns JNI references.
 /// </summary>
 public static class ShizukuInterop
 {
-    private static IntPtr _shizukuClass;
-    private static IntPtr _newProcessMethod;
-    private static bool _initialized;
+    private static JavaClass GetShizukuClass() => JavaClass.ForName(
+        "rikka.shizuku.Shizuku", true, global::Android.App.Application.Context.ClassLoader)
+        ?? throw new InvalidOperationException("Shizuku API unavailable.");
 
-    private static void EnsureInitialized()
+    private static bool ReadBoolean(string name)
     {
-        if (_initialized) return;
-        _initialized = true;
-
         try
         {
-            _shizukuClass = JNIEnv.FindClass("rikka/shizuku/Shizuku");
-            _newProcessMethod = JNIEnv.GetStaticMethodID(_shizukuClass, "newProcess",
-                "([Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Lrikka/shizuku/ShizukuRemoteProcess;");
-            // Make accessible (it's private in v13+)
-            JNIEnv.CallStaticVoidMethod(_shizukuClass,
-                JNIEnv.GetStaticMethodID(_shizukuClass, "setAccessible",
-                    "(Ljava/lang/reflect/AccessibleObject;Z)V"));
+            using var type = GetShizukuClass();
+            using var method = type.GetDeclaredMethod(name);
+            using var value = method?.Invoke(null);
+            return value?.JavaCast<global::Java.Lang.Boolean>()?.BooleanValue() == true;
         }
         catch
         {
-            // Shizuku classes not available
+            return false;
         }
     }
 
-    public static bool IsAvailable
-    {
-        get
-        {
-            try
-            {
-                EnsureInitialized();
-                if (_shizukuClass == IntPtr.Zero) return false;
-                var method = JNIEnv.GetStaticMethodID(_shizukuClass, "pingBinder", "()Z");
-                return JNIEnv.CallStaticBooleanMethod(_shizukuClass, method);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-    }
+    public static bool IsAvailable => ReadBoolean("pingBinder");
 
-    public static bool HasPermission
-    {
-        get
-        {
-            try
-            {
-                EnsureInitialized();
-                if (_shizukuClass == IntPtr.Zero) return false;
-                var method = JNIEnv.GetStaticMethodID(_shizukuClass, "checkSelfPermission", "()I");
-                return JNIEnv.CallStaticIntMethod(_shizukuClass, method) == 0; // PERMISSION_GRANTED
-            }
-            catch
-            {
-                return false;
-            }
-        }
-    }
+    public static bool HasPermission => ReadInt("checkSelfPermission", -1) == 0;
 
-    public static int Uid
-    {
-        get
-        {
-            try
-            {
-                EnsureInitialized();
-                var method = JNIEnv.GetStaticMethodID(_shizukuClass, "getUid", "()I");
-                return JNIEnv.CallStaticIntMethod(_shizukuClass, method);
-            }
-            catch
-            {
-                return -1;
-            }
-        }
-    }
+    public static int Uid => ReadInt("getUid", -1);
 
     public static bool IsRoot => Uid == 0;
+
+    private static int ReadInt(string name, int fallback)
+    {
+        try
+        {
+            using var type = GetShizukuClass();
+            using var method = type.GetDeclaredMethod(name);
+            using var value = method?.Invoke(null);
+            return value?.JavaCast<global::Java.Lang.Integer>()?.IntValue() ?? fallback;
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
 
     public static void RequestPermission(int code)
     {
         try
         {
-            EnsureInitialized();
-            if (IsPreV11 || HasPermission) return;
-            if (ShouldShowRationale) return;
-            var method = JNIEnv.GetStaticMethodID(_shizukuClass, "requestPermission", "(I)V");
-            JNIEnv.CallStaticVoidMethod(_shizukuClass, method, new JValue(code));
+            if (!IsAvailable || ReadBoolean("isPreV11") || HasPermission ||
+                ReadBoolean("shouldShowRequestPermissionRationale")) return;
+
+            using var type = GetShizukuClass();
+            using var method = type.GetDeclaredMethod("requestPermission", global::Java.Lang.Integer.Type!);
+            using var requestCode = global::Java.Lang.Integer.ValueOf(code);
+            using var result = method?.Invoke(null, requestCode);
         }
         catch
         {
-            // Shizuku not available
-        }
-    }
-
-    private static bool IsPreV11
-    {
-        get
-        {
-            try
-            {
-                var method = JNIEnv.GetStaticMethodID(_shizukuClass, "isPreV11", "()Z");
-                return JNIEnv.CallStaticBooleanMethod(_shizukuClass, method);
-            }
-            catch { return true; }
-        }
-    }
-
-    private static bool ShouldShowRationale
-    {
-        get
-        {
-            try
-            {
-                var method = JNIEnv.GetStaticMethodID(_shizukuClass, "shouldShowRequestPermissionRationale", "()Z");
-                return JNIEnv.CallStaticBooleanMethod(_shizukuClass, method);
-            }
-            catch { return false; }
+            // Shizuku may have stopped or permission may have been revoked.
         }
     }
 
     /// <summary>
-    /// Runs a shell command via Shizuku's private newProcess() method.
-    /// Returns (exitCode, stdout, stderr).
+    /// Runs a shell command and converts Java/API failures into an ordinary error result.
+    /// Call from a worker thread because process I/O blocks.
     /// </summary>
     public static (int ExitCode, string Stdout, string Stderr) RunShellCommand(string command)
     {
-        EnsureInitialized();
-
-        // Call private method: Shizuku.newProcess(new String[]{"sh","-c",cmd}, null, null)
-        var cmdArray = JNIEnv.NewArray(new[] {
-            new global::Java.Lang.String("sh"),
-            new global::Java.Lang.String("-c"),
-            new global::Java.Lang.String(command)
-        });
-        var result = JNIEnv.CallStaticObjectMethod(_shizukuClass, _newProcessMethod,
-            new JValue(cmdArray), new JValue(IntPtr.Zero), new JValue(IntPtr.Zero));
-
-        if (result == IntPtr.Zero)
-            return (-1, "", "Shizuku newProcess returned null");
-
-        // Read stdout/stderr from the ShizukuRemoteProcess
-        var procClass = JNIEnv.GetObjectClass(result);
-
-        var getInputStream = JNIEnv.GetMethodID(procClass, "getInputStream", "()Ljava/io/InputStream;");
-        var getErrorStream = JNIEnv.GetMethodID(procClass, "getErrorStream", "()Ljava/io/InputStream;");
-        var waitFor = JNIEnv.GetMethodID(procClass, "waitFor", "()I");
-        var destroy = JNIEnv.GetMethodID(procClass, "destroy", "()V");
-
-        var stdoutStream = JNIEnv.CallObjectMethod(result, getInputStream);
-        var stderrStream = JNIEnv.CallObjectMethod(result, getErrorStream);
-
-        var stdout = ReadStream(stdoutStream);
-        var stderr = ReadStream(stderrStream);
-
-        var exitCode = JNIEnv.CallIntMethod(result, waitFor);
-        JNIEnv.CallVoidMethod(result, destroy);
-
-        JNIEnv.DeleteLocalRef(cmdArray);
-        JNIEnv.DeleteLocalRef(result);
-        JNIEnv.DeleteLocalRef(procClass);
-
-        return (exitCode, stdout, stderr);
-    }
-
-    private static string ReadStream(IntPtr inputStream)
-    {
-        if (inputStream == IntPtr.Zero) return "";
-
-        // Use Java Scanner to read the entire stream as a string
-        var scannerClass = JNIEnv.FindClass("java/util/Scanner");
-        var scannerCtor = JNIEnv.GetMethodID(scannerClass, "<init>", "(Ljava/io/InputStream;Ljava/lang/String;)V");
-        var useDelimiter = JNIEnv.GetMethodID(scannerClass, "useDelimiter", "(Ljava/lang/String;)Ljava/util/Scanner;");
-        var hasNext = JNIEnv.GetMethodID(scannerClass, "hasNext", "()Z");
-        var next = JNIEnv.GetMethodID(scannerClass, "next", "()Ljava/lang/String;");
-        var close = JNIEnv.GetMethodID(scannerClass, "close", "()V");
-
-        var charset = JNIEnv.NewString("UTF-8");
-        var delimiter = JNIEnv.NewString("\\A");
-        var scanner = JNIEnv.NewObject(scannerClass, scannerCtor, new JValue(inputStream), new JValue(charset));
-        JNIEnv.CallObjectMethod(scanner, useDelimiter, new JValue(delimiter));
-
-        var result = "";
-        if (JNIEnv.CallBooleanMethod(scanner, hasNext))
+        try
         {
-            var str = JNIEnv.CallObjectMethod(scanner, next);
-            result = JNIEnv.GetString(str, JniHandleOwnership.DoNotTransfer) ?? "";
+            using var type = GetShizukuClass();
+            using var stringArrayType = JavaClass.ForName("[Ljava.lang.String;");
+            using var stringType = JavaClass.FromType(typeof(global::Java.Lang.String));
+            using var method = type.GetDeclaredMethod("newProcess", stringArrayType!, stringArrayType!, stringType);
+            if (method is null)
+                return (-1, "", "Shizuku newProcess unavailable.");
+
+            // newProcess is private in Shizuku v13. Accessible belongs to the reflected
+            // Method, not to Shizuku itself. No raw JNI handles cross worker threads.
+            method.Accessible = true;
+            using var shell = new global::Java.Lang.String("sh");
+            using var option = new global::Java.Lang.String("-c");
+            using var script = new global::Java.Lang.String(command);
+            using var arguments = global::Java.Lang.Reflect.Array.NewInstance(stringType, 3)!;
+            global::Java.Lang.Reflect.Array.Set(arguments, 0, shell);
+            global::Java.Lang.Reflect.Array.Set(arguments, 1, option);
+            global::Java.Lang.Reflect.Array.Set(arguments, 2, script);
+            using var result = method.Invoke(null, new JavaObject[] { arguments, null!, null! });
+            if (result is null)
+                return (-1, "", "Shizuku newProcess returned null.");
+
+            using var process = result.JavaCast<global::Java.Lang.Process>();
+            try
+            {
+                using var stdoutReader = new StreamReader(process.InputStream!);
+                using var stderrReader = new StreamReader(process.ErrorStream!);
+                // Drain both pipes concurrently: a full stderr pipe must not block
+                // the process while we wait for stdout to close.
+                var stdout = stdoutReader.ReadToEndAsync();
+                var stderr = stderrReader.ReadToEndAsync();
+                var exitCode = process.WaitFor();
+                Task.WhenAll(stdout, stderr).GetAwaiter().GetResult();
+                return (exitCode, stdout.Result, stderr.Result);
+            }
+            finally
+            {
+                process.Destroy();
+            }
         }
-
-        JNIEnv.CallVoidMethod(scanner, close);
-        JNIEnv.DeleteLocalRef(scanner);
-        JNIEnv.DeleteLocalRef(scannerClass);
-        JNIEnv.DeleteLocalRef(charset);
-        JNIEnv.DeleteLocalRef(delimiter);
-
-        return result;
+        catch (Exception ex)
+        {
+            return (-1, "", "Shizuku error: " + ex.Message);
+        }
     }
 }

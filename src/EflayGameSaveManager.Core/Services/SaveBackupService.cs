@@ -31,15 +31,28 @@ public sealed class SaveBackupService
                 }
                 else if (File.Exists(path.Path))
                 {
+                    var fileName = Path.GetFileName(path.Path);
+                    if (SavePathFilter.IsExcluded(fileName, fileName, saveUnit.Exclude))
+                    {
+                        continue;
+                    }
+
                     var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, saveUnit.Id.ToString());
                     Directory.CreateDirectory(deviceDirectory);
-                    var destination = Path.Combine(deviceDirectory, Path.GetFileName(path.Path));
+                    var destination = Path.Combine(deviceDirectory, fileName);
                     await FileCopyHelper.CopyFileAsync(path.Path, destination, cancellationToken);
                 }
                 else if (Directory.Exists(path.Path))
                 {
                     var destination = Path.Combine(targetDirectory, path.DeviceName, saveUnit.Id.ToString());
-                    CopyDirectoryIncludingBaseDirectory(path.Path, destination);
+                    if (saveUnit.ContentsOnly)
+                    {
+                        CopyDirectory(path.Path, Path.Combine(destination, "content"), saveUnit.Exclude);
+                    }
+                    else
+                    {
+                        CopyDirectoryIncludingBaseDirectory(path.Path, destination, saveUnit.Exclude);
+                    }
                 }
             }
         }
@@ -47,22 +60,22 @@ public sealed class SaveBackupService
         return targetDirectory;
     }
 
-    private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+    private static void CopyDirectory(
+        string sourceDirectory,
+        string destinationDirectory,
+        IReadOnlyList<string>? exclude = null)
     {
-        Directory.CreateDirectory(destinationDirectory);
-
-        foreach (var file in Directory.GetFiles(sourceDirectory))
-        {
-            FileCopyHelper.CopyFile(file, Path.Combine(destinationDirectory, Path.GetFileName(file)));
-        }
-
-        foreach (var directory in Directory.GetDirectories(sourceDirectory))
-        {
-            CopyDirectory(directory, Path.Combine(destinationDirectory, Path.GetFileName(directory)));
-        }
+        SavePathFilter.CopyDirectory(
+            sourceDirectory,
+            destinationDirectory,
+            exclude,
+            (source, destination) => FileCopyHelper.CopyFile(source, destination));
     }
 
-    private static void CopyDirectoryIncludingBaseDirectory(string sourceDirectory, string destinationParentDirectory)
+    private static void CopyDirectoryIncludingBaseDirectory(
+        string sourceDirectory,
+        string destinationParentDirectory,
+        IReadOnlyList<string>? exclude = null)
     {
         var directoryName = Path.GetFileName(sourceDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         if (string.IsNullOrWhiteSpace(directoryName))
@@ -70,6 +83,6 @@ public sealed class SaveBackupService
             directoryName = new DirectoryInfo(sourceDirectory).Name;
         }
 
-        CopyDirectory(sourceDirectory, Path.Combine(destinationParentDirectory, directoryName));
+        CopyDirectory(sourceDirectory, Path.Combine(destinationParentDirectory, directoryName), exclude);
     }
 }

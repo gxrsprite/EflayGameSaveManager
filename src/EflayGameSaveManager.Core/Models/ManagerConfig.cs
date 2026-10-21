@@ -32,6 +32,12 @@ public sealed class GameDefinition
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
+    [JsonPropertyName("chinese_name")]
+    public string ChineseName { get; set; } = string.Empty;
+
+    [JsonPropertyName("note")]
+    public string Note { get; set; } = string.Empty;
+
     [JsonPropertyName("save_paths")]
     public List<SaveUnitDefinition> SavePaths { get; set; } = [];
 
@@ -73,6 +79,22 @@ public sealed class SaveUnitDefinition
 
     [JsonPropertyName("linked_unit_ids")]
     public List<int> LinkedUnitIds { get; set; } = [];
+
+    /// <summary>
+    /// Wildcard patterns (e.g. <c>settings*</c>) for files that must stay device-local:
+    /// they are neither packed on backup nor overwritten on restore.
+    /// </summary>
+    [JsonPropertyName("exclude")]
+    public List<string> Exclude { get; set; } = [];
+
+    /// <summary>
+    /// When true, only the folder's contents are synced — the folder's own name is not
+    /// stored in the archive and the target folder name is irrelevant on restore.
+    /// Use this when devices use different directory names for the same save location
+    /// (e.g. PC <c>...\Cult Of The Lamb\saves</c> vs Android <c>.../user</c>).
+    /// </summary>
+    [JsonPropertyName("contents_only")]
+    public bool ContentsOnly { get; set; }
 }
 
 public sealed class AppSettings
@@ -166,4 +188,12 @@ public sealed class DeviceDefinition
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Real platform reported by the client that registered the device
+    /// (<c>android</c>, <c>windows</c>, <c>macos</c>, <c>linux</c>).
+    /// Save-format plugins must use this instead of guessing from file paths.
+    /// </summary>
+    [JsonPropertyName("platform")]
+    public string Platform { get; set; } = string.Empty;
 }

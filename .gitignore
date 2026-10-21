@@ -72,9 +72,15 @@ src/EflayGameSaveManager.Kotlin/*.jks
 src/EflayGameSaveManager.Kotlin/*.keystore
 src/EflayGameSaveManager.Kotlin/*.hprof
 src/EflayGameSaveManager.Kotlin/gradle/wrapper/gradle-wrapper.jar
+artifacts/private/
+*.jks
+*.keystore
 
 # === MAUI / .NET Android ===
 src/EflayGameSaveManager.Maui/libs/*.aar
+
+# === NativeAOT publish output ===
+publish-aot/
 
 # == Git ===
 *.orig

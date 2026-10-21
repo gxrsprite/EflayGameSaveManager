@@ -63,7 +63,7 @@ The MAUI platform code lives in namespace `EflayGameSaveManager.Maui.Platforms.A
 `EflayGameSaveManager.Core` is shared with desktop (Avalonia). Shizuku is an Android-only concern. Injecting Shizuku awareness into Core would leak platform-specific code.
 
 **Fix**: All Shizuku logic lives behind `#if ANDROID` in the MAUI ViewModel layer:
-- `ShizukuInterop.cs` — JNI bridge to `rikka.shizuku.Shizuku` Java API
+- `ShizukuInterop.cs` — managed Java reflection bridge to `rikka.shizuku.Shizuku` Java API
 - `ShizukuFileService.cs` — `CopyFromRestrictedAsync()` / `CopyToRestrictedAsync()` using Shizuku shell
 - `MainPageViewModel.cs` — upload/restore flow intercepts restricted paths, stages/restores via Shizuku around Core calls, then cleans up temp files. Core operates on temp paths and never knows Shizuku exists.
 
@@ -96,6 +96,14 @@ The favorites chip template in `MainPage.xaml` used `{StaticResource TextColor}`
 The `Favorite` button lives inside the `CollectionView` item template, and toggling it also updates the separate `FavoriteGames` bound collection. Mutating that collection immediately inside the click command can make MAUI/Android tear down the page or bounce back to launcher without a useful managed exception.
 
 **Fix**: keep the update incremental, but defer the `FavoriteGames` add/remove by one UI tick with `await Task.Yield()` before mutating the bound collection.
+
+22. **Restricted-path backup can abort the process when JNI reference ownership is wrong**
+
+Device crash history for Cult of the Lamb recorded `SIGABRT` with `Attempt to delete global reference reference as local JNI reference` on a .NET worker thread. Managed exception handling cannot catch this native abort. Removing individual reference deletions leaves fragile raw handles and leaks, so the bridge now uses disposable managed Java peers throughout. `newProcess` is made accessible through its reflected `Method`; Shizuku has no static `setAccessible` method. Standard output and error are drained concurrently to avoid process pipe deadlocks.
+
+Upload staging now isolates save units, reports inaccessible restricted paths as failures, and rolls back redirected paths and temporary files if staging fails partway through.
+
+Validation (2026-10-20): Debug and Release Android builds succeeded; one Debug backup and two consecutive Release backups of Cult of the Lamb succeeded on device with no new crash-buffer entries. The 63 existing Core tests passed using .NET 10 runtime roll-forward (the host has no .NET 9 runtime). Permission-failure rollback and restore were not exercised on device.
 
 ## Build & deploy
 

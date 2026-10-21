@@ -70,12 +70,17 @@ object ShizukuHelper {
             destDir.mkdirs()
 
             val destName = restrictedPath.trimEnd('/').substringAfterLast('/').ifBlank { "copy" }
-            val tempDest = File(destDir, "shizuku-$destName")
+            // Preserve the original directory name for folder-inclusive mode. In
+            // contents-only mode the archive layer uses its stable "content" wrapper.
+            val tempDest = File(destDir, destName)
             tempDest.deleteRecursively()
 
-            val srcFile = File(restrictedPath)
-            val cmd = if (srcFile.isDirectory || restrictedPath.endsWith("/"))
-                "cp -rT $src ${escapeShell(tempDest.absolutePath)}"
+            // NOTE: in-app File().isDirectory always returns false for restricted
+            // paths (EACCES in the app process), so detect via the elevated shell.
+            // toybox `cp -T` rejects an existing destination directory, so copy the
+            // source contents explicitly ("src/." -> "dest/").
+            val cmd = if (isDirectory(restrictedPath) || restrictedPath.endsWith("/"))
+                "mkdir -p ${escapeShell(tempDest.absolutePath)} && cp -r $src/. ${escapeShell(tempDest.absolutePath)}/"
             else
                 "cp $src ${escapeShell(tempDest.absolutePath)}"
 
@@ -92,15 +97,16 @@ object ShizukuHelper {
             if (!isAvailable()) return@withContext false
             if (!isRestrictedPath(restrictedPath)) return@withContext false
 
-            val parent = File(restrictedPath).parentFile
-            if (parent != null) {
-                runShell("mkdir -p ${escapeShell(parent.absolutePath)}")
-            }
-
+            val dest = escapeShell(restrictedPath)
+            // toybox `cp -T` fails when DEST already exists as a directory (which is
+            // always the case on restore), so merge contents with "src/." -> "dest/".
             val cmd = if (sourceDir.isDirectory)
-                "cp -rT ${escapeShell(sourceDir.absolutePath)} ${escapeShell(restrictedPath)}"
-            else
-                "cp ${escapeShell(sourceDir.absolutePath)} ${escapeShell(restrictedPath)}"
+                "mkdir -p $dest && cp -r ${escapeShell(sourceDir.absolutePath)}/. $dest/"
+            else {
+                val parent = File(restrictedPath).parentFile
+                val ensureParent = if (parent != null) "mkdir -p ${escapeShell(parent.absolutePath)} && " else ""
+                "$ensureParent cp ${escapeShell(sourceDir.absolutePath)} $dest"
+            }
 
             Log.d(TAG, "copyToRestricted: $cmd")
             val result = runShell(cmd)
@@ -109,6 +115,17 @@ object ShizukuHelper {
 
     fun isRestrictedPath(path: String): Boolean {
         return ArchiveService.isRestrictedPath(path)
+    }
+
+    /**
+     * Directory check that works for restricted paths: in-app File().isDirectory
+     * always returns false there (EACCES), so ask the elevated shell instead.
+     */
+    fun isDirectory(path: String): Boolean {
+        if (isRestrictedPath(path) && isAvailable()) {
+            return runShell("test -d ${escapeShell(path)}").success
+        }
+        return File(path).isDirectory
     }
 
     fun escapeShell(path: String): String {

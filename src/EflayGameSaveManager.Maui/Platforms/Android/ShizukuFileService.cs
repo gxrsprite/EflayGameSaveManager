@@ -37,14 +37,21 @@ public static class ShizukuFileService
         Directory.CreateDirectory(destDir);
         var destName = Path.GetFileName(restrictedPath.TrimEnd('/'));
         if (string.IsNullOrWhiteSpace(destName)) destName = "copy";
-        var tempDest = Path.Combine(destDir, $"shizuku-{destName}");
+        // Keep the original name for folder-inclusive mode. Contents-only mode is
+        // archived under the stable "content" wrapper by the Core archive service.
+        var tempDest = Path.Combine(destDir, destName);
 
         // Clean stale copy
         if (Directory.Exists(tempDest)) Directory.Delete(tempDest, true);
         if (File.Exists(tempDest)) File.Delete(tempDest);
 
-        var cmd = Directory.Exists(restrictedPath) || restrictedPath.EndsWith('/')
-            ? $"cp -rT '{EscapeShell(restrictedPath)}' '{EscapeShell(tempDest)}'"
+        // NOTE: in-app Directory.Exists always returns false for restricted paths
+        // (EACCES), so directory detection must go through the elevated shell.
+        // toybox `cp -T` rejects an existing destination directory, so copy the
+        // source contents explicitly ("src/." -> "dest/").
+        var isDir = restrictedPath.EndsWith('/') || await IsDirectoryViaShellAsync(restrictedPath);
+        var cmd = isDir
+            ? $"mkdir -p '{EscapeShell(tempDest)}' && cp -r '{EscapeShell(restrictedPath)}'/. '{EscapeShell(tempDest)}'/"
             : $"cp '{EscapeShell(restrictedPath)}' '{EscapeShell(tempDest)}'";
 
         Debug.WriteLine($"[Shizuku] copyFromRestricted: {cmd}");
@@ -79,8 +86,10 @@ public static class ShizukuFileService
                 ShizukuInterop.RunShellCommand($"mkdir -p '{EscapeShell(parent)}'"));
         }
 
+        // toybox `cp -T` fails when DEST already exists as a directory (always the case
+        // on restore), so merge contents with "src/." -> "dest/".
         var cmd = Directory.Exists(sourcePath)
-            ? $"cp -rT '{EscapeShell(sourcePath)}' '{EscapeShell(restrictedPath)}'"
+            ? $"mkdir -p '{EscapeShell(restrictedPath)}' && cp -r '{EscapeShell(sourcePath)}'/. '{EscapeShell(restrictedPath)}'/"
             : $"cp '{EscapeShell(sourcePath)}' '{EscapeShell(restrictedPath)}'";
 
         Debug.WriteLine($"[Shizuku] copyToRestricted: {cmd}");
@@ -104,6 +113,16 @@ public static class ShizukuFileService
                path.StartsWith("/data/media/obb/") ||
                path.StartsWith("/sdcard/Android/data/") ||
                path.StartsWith("/storage/emulated/0/Android/data/");
+    }
+
+    private static async Task<bool> IsDirectoryViaShellAsync(string restrictedPath)
+    {
+        if (!ShizukuInterop.IsAvailable || !ShizukuInterop.HasPermission)
+            return Directory.Exists(restrictedPath);
+
+        var result = await Task.Run(() =>
+            ShizukuInterop.RunShellCommand($"test -d '{EscapeShell(restrictedPath)}'"));
+        return result.ExitCode == 0;
     }
 
     private static string EscapeShell(string path)

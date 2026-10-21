@@ -18,7 +18,11 @@ public sealed class GameLibraryService
         _runtimeSettingsService = runtimeSettingsService ?? new AppRuntimeSettingsService();
     }
 
-    public AppSnapshot CreateSnapshot(ManagerConfig config, string configPath, string? machineName = null)
+    public AppSnapshot CreateSnapshot(
+        ManagerConfig config,
+        string configPath,
+        string? machineName = null,
+        string? platform = null)
     {
         var configDirectory = Path.GetDirectoryName(configPath) ?? AppContext.BaseDirectory;
         var backupRoot = ResolveBackupRoot(configDirectory, config.BackupPath);
@@ -26,7 +30,7 @@ public sealed class GameLibraryService
         var resolvedDeviceName = string.IsNullOrWhiteSpace(runtimeSettings.ForcedDeviceName)
             ? machineName
             : runtimeSettings.ForcedDeviceName.Trim();
-        var currentDevice = _currentDeviceService.EnsureCurrentDevice(config, resolvedDeviceName);
+        var currentDevice = _currentDeviceService.EnsureCurrentDevice(config, resolvedDeviceName, platform);
 
         var games = config.Games
             .Select(game =>
@@ -45,7 +49,9 @@ public sealed class GameLibraryService
                                 ResolveDeviceName(config.Devices, path.DeviceId),
                                 _tokenResolver.ResolvePath(path.Path)))
                             .OrderBy(path => path.DeviceName, StringComparer.OrdinalIgnoreCase)
-                            .ToArray()))
+                            .ToArray(),
+                        saveUnit.Exclude.ToArray(),
+                        saveUnit.ContentsOnly))
                         .ToArray(),
                     game.GamePaths
                         .Select(path => new ResolvedGamePath(
@@ -60,7 +66,9 @@ public sealed class GameLibraryService
                     currentDeviceGamePath with
                     {
                         Path = _tokenResolver.ResolvePath(currentDeviceGamePath.Path)
-                    });
+                    },
+                    game.ChineseName,
+                    game.Note);
             })
             .OrderBy(game => game.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();

@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using EflayGameSaveManager.Core.Models;
 using EflayGameSaveManager.Core.Serialization;
+using EflayGameSaveManager.Core.Services.GamePlugins;
 
 namespace EflayGameSaveManager.Core.Services;
 
@@ -158,7 +159,8 @@ public sealed class CloudSyncService
         GameSnapshot game,
         CurrentDeviceContext currentDevice,
         CloudSettings cloudSettings,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        GameSaveTargetPlatform? targetPlatformOverride = null)
     {
         AppLogger.Info(
             $"Cloud restore-current start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
@@ -169,14 +171,15 @@ public sealed class CloudSyncService
         AppLogger.Info(
             $"Cloud restore-current resolved head: game={game.Name}, device={currentDevice.DeviceId}, backupDate={currentBackup.Date}, backupPath={currentBackup.Path}");
 
-        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, currentBackup, cancellationToken);
+        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, currentBackup, cancellationToken, targetPlatformOverride);
     }
 
     public async Task<CloudDownloadResult> RestoreGameLatestSaveAsync(
         GameSnapshot game,
         CurrentDeviceContext currentDevice,
         CloudSettings cloudSettings,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        GameSaveTargetPlatform? targetPlatformOverride = null)
     {
         AppLogger.Info(
             $"Cloud restore-latest start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
@@ -187,7 +190,7 @@ public sealed class CloudSyncService
         AppLogger.Info(
             $"Cloud restore-latest resolved backup: game={game.Name}, device={currentDevice.DeviceId}, backupDate={latestBackup.Date}, backupDevice={latestBackup.DeviceId}, backupPath={latestBackup.Path}");
 
-        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, latestBackup, cancellationToken);
+        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, latestBackup, cancellationToken, targetPlatformOverride);
     }
 
     public async Task<CloudDownloadResult> RestoreGameBackupAsync(
@@ -196,7 +199,8 @@ public sealed class CloudSyncService
         CloudSettings cloudSettings,
         string backupDate,
         string? deviceId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        GameSaveTargetPlatform? targetPlatformOverride = null)
     {
         if (string.IsNullOrWhiteSpace(backupDate))
         {
@@ -210,7 +214,7 @@ public sealed class CloudSyncService
         AppLogger.Info(
             $"Cloud restore-backup resolved entry: game={game.Name}, backupDate={backupDate}, device={backup.DeviceId}, backupPath={backup.Path}, size={backup.Size}");
 
-        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, backup, cancellationToken);
+        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, backup, cancellationToken, targetPlatformOverride);
     }
 
     public Task<CloudDownloadResult> RestoreGameBackupAsync(
@@ -218,9 +222,10 @@ public sealed class CloudSyncService
         CurrentDeviceContext currentDevice,
         CloudSettings cloudSettings,
         string backupDate,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        GameSaveTargetPlatform? targetPlatformOverride = null)
     {
-        return RestoreGameBackupAsync(game, currentDevice, cloudSettings, backupDate, null, cancellationToken);
+        return RestoreGameBackupAsync(game, currentDevice, cloudSettings, backupDate, null, cancellationToken, targetPlatformOverride);
     }
 
     public async Task<CloudManifestRebuildResult> RebuildGameBackupsManifestAsync(
@@ -438,7 +443,8 @@ public sealed class CloudSyncService
         CurrentDeviceContext currentDevice,
         CloudSettings cloudSettings,
         LegacyBackupEntry backup,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        GameSaveTargetPlatform? targetPlatformOverride = null)
     {
         var archiveKey = ResolveArchiveKey(backup, cloudSettings, game.Name);
         AppLogger.Info(
@@ -451,7 +457,7 @@ public sealed class CloudSyncService
         try
         {
             await _storageClient.DownloadFileAsync(cloudSettings.Backend, archiveKey, archivePath, cancellationToken);
-            _archiveTransferService.RestoreCurrentDeviceArchive(archivePath, game, currentDevice);
+            _archiveTransferService.RestoreCurrentDeviceArchive(archivePath, game, currentDevice, targetPlatformOverride);
             await UpdateSyncStateAsync(cloudSettings, currentDevice, game.Name, backup.Date, cancellationToken);
             AppLogger.Info(
                 $"Cloud restore-backup completed: game={game.Name}, backupDate={backup.Date}, archiveKey={archiveKey}, downloadedBytes={new FileInfo(archivePath).Length}");

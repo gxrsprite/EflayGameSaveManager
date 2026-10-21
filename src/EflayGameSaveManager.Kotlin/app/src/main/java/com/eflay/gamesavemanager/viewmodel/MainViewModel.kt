@@ -52,6 +52,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val selectedSaveUnitTarget: SaveUnitTargetOption? = null,
         val editSavePath: String = "",
         val editGamePath: String = "",
+        val editExcludePatterns: String = "",
+        val editContentsOnly: Boolean = false,
         val hasNoFavoriteGames: Boolean = true,
         val shizukuStatus: String = "Shizuku: checking...",
         val showZipRestorePicker: Boolean = false,
@@ -86,6 +88,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
         currentSnapshot = configService.createSnapshot(currentConfig!!, configPath, deviceName)
+
+        // Persist this device's platform so save-format decisions stop relying on path shapes.
+        run {
+            val deviceId = currentSnapshot!!.currentDevice.deviceId
+            val withPlatform = configService.withCurrentPlatform(currentConfig!!, deviceId)
+            if (withPlatform !== currentConfig) {
+                currentConfig = withPlatform
+                configService.saveConfig(configPath, withPlatform)
+            }
+        }
 
         val snapshot = currentSnapshot!!
         val games = snapshot.games.map { game ->
@@ -152,7 +164,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 targets.firstOrNull { !it.isNew && it.saveUnitId == cp.saveUnitId }
             } ?: targets.firstOrNull { !it.isNew } ?: targets.firstOrNull(),
             editSavePath = currentPath?.path ?: "",
-            editGamePath = editGamePath
+            editGamePath = editGamePath,
+            editExcludePatterns = SavePathFilter.formatPatterns(
+                gameDef?.save_paths?.firstOrNull { it.id == currentPath?.saveUnitId }?.exclude
+            ),
+            editContentsOnly = gameDef?.save_paths?.firstOrNull { it.id == currentPath?.saveUnitId }?.contents_only
+                ?: false
         )
     }
 
@@ -307,6 +324,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(editGamePath = value)
     }
 
+    fun updateEditExcludePatterns(value: String) {
+        _uiState.value = _uiState.value.copy(editExcludePatterns = value)
+    }
+
+    fun updateEditContentsOnly(value: Boolean) {
+        _uiState.value = _uiState.value.copy(editContentsOnly = value)
+    }
+
     fun updateSelectedSaveUnitTarget(target: SaveUnitTargetOption) {
         _uiState.value = _uiState.value.copy(selectedSaveUnitTarget = target)
     }
@@ -371,7 +396,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val updatedPaths = targetUnit.paths.toMutableMap()
                 updatedPaths[deviceId] = savePath
 
-                val updatedUnit = targetUnit.copy(paths = updatedPaths)
+                val updatedUnit = targetUnit.copy(
+                    paths = updatedPaths,
+                    exclude = SavePathFilter.parsePatterns(state.editExcludePatterns),
+                    contents_only = state.editContentsOnly
+                )
                 val updatedSavePaths = game.save_paths.map { unit ->
                     if (unit.id == updatedUnit.id) updatedUnit else unit
                 }

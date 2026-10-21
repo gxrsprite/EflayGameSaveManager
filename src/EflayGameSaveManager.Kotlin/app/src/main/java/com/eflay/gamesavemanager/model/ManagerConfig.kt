@@ -17,6 +17,8 @@ data class ManagerConfig(
 @Serializable
 data class GameDefinition(
     val name: String = "",
+    val chinese_name: String = "",
+    val note: String = "",
     val save_paths: List<SaveUnitDefinition> = emptyList(),
     val game_paths: Map<String, String> = emptyMap(),
     val next_save_unit_id: Int = 0,
@@ -29,7 +31,11 @@ data class SaveUnitDefinition(
     val unit_type: SaveUnitType = SaveUnitType.Folder,
     val paths: Map<String, String> = emptyMap(),
     val delete_before_apply: Boolean = false,
-    val linked_unit_ids: List<Int> = emptyList()
+    val linked_unit_ids: List<Int> = emptyList(),
+    /** Wildcard patterns for device-local files: never packed on backup, never overwritten on restore. */
+    val exclude: List<String> = emptyList(),
+    /** Sync only the folder's contents, so differing folder names on each device don't matter. */
+    val contents_only: Boolean = false
 )
 
 @Serializable
@@ -89,5 +95,7 @@ data class HotkeySettings(
 @Serializable
 data class DeviceDefinition(
     val id: String = "",
-    val name: String = ""
+    val name: String = "",
+    /** Real platform reported by the client: "android", "windows", ... */
+    val platform: String = ""
 )
