@@ -247,6 +247,37 @@ public sealed class SavePathFilterTests
     }
 
     [Fact]
+    public void Restore_ContentsOnlyUnwrapsLegacyUserFolder()
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var archive = Path.Combine(root, "phone.zip");
+            var extract = Path.Combine(root, "0", "user");
+            var target = Path.Combine(root, "pc", "saves");
+            Directory.CreateDirectory(extract);
+            Directory.CreateDirectory(target);
+            File.WriteAllText(Path.Combine(extract, "slot_0"), "from-phone");
+            System.IO.Compression.ZipFile.CreateFromDirectory(
+                Path.Combine(root, "0"), archive,
+                System.IO.Compression.CompressionLevel.NoCompression,
+                includeBaseDirectory: false);
+
+            new ArchiveTransferService().RestoreCurrentDeviceArchive(
+                archive,
+                FolderGame(target, [], contentsOnly: true),
+                Device());
+
+            Assert.Equal("from-phone", File.ReadAllText(Path.Combine(target, "slot_0")));
+            Assert.False(Directory.Exists(Path.Combine(target, "user")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void FolderMode_PreservesOriginalFolderName()
     {
         var root = NewTempDirectory();

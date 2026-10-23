@@ -262,7 +262,9 @@ public sealed class ArchiveTransferService
                     var contentFolder = Path.Combine(sourceRoot, "content");
                     var actualSource = Directory.Exists(contentFolder)
                         ? contentFolder // stable contents-only layout (flag-independent)
-                        : (localUnit.ContentsOnly ? sourceRoot : ResolveFolderContentRoot(sourceRoot, localPath.Path));
+                        : (localUnit.ContentsOnly
+                            ? ResolveContentsOnlyRoot(sourceRoot, localPath.Path)
+                            : ResolveFolderContentRoot(sourceRoot, localPath.Path));
                     CopyDirectory(actualSource, localPath.Path, localUnit.Exclude);
                     AppLogger.Info($"Restore unit {localUnit.Id}: copied folder {actualSource} -> {localPath.Path} (contentsOnly={localUnit.ContentsOnly})");
                 }
@@ -348,6 +350,29 @@ public sealed class ArchiveTransferService
 
         // Name differs: keep the archived original wrapper (folder mode), so e.g.
         // restoring saves/ to target user/ results in user/saves/ rather than user/.
+        return sourceRoot;
+    }
+
+    private static string ResolveContentsOnlyRoot(string sourceRoot, string targetPath)
+    {
+        var childDirectories = Directory.GetDirectories(sourceRoot);
+        var childFiles = Directory.GetFiles(sourceRoot);
+        if (childFiles.Length == 0 && childDirectories.Length == 1)
+        {
+            var childName = Path.GetFileName(childDirectories[0]);
+            var targetName = Path.GetFileName(targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+            // Older mobile clients archived the physical folder ("user") even when
+            // the unit was marked contents-only. Treat both common save-folder names
+            // as transport wrappers so Android -> PC restores land at the save root.
+            if (string.Equals(childName, targetName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(childName, "user", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(childName, "saves", StringComparison.OrdinalIgnoreCase))
+            {
+                return childDirectories[0];
+            }
+        }
+
         return sourceRoot;
     }
 
