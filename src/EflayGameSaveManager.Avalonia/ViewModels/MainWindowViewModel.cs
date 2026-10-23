@@ -768,6 +768,29 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private async Task RestoreSelectedGameLatestSaveAsync()
+    {
+        if (!TryGetSelectedCloudContext(out var game, out var config, out var snapshot, out var cloudSettings))
+        {
+            return;
+        }
+
+        AppLogger.Info(
+            $"UI restore-latest requested: game={game.Name}, device={snapshot.CurrentDevice.DeviceName}[{snapshot.CurrentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
+
+        await RunBusyAsync(
+            $"Restoring latest cloud save for {game.Name}...",
+            async () =>
+            {
+                var result = await _cloudSyncService.RestoreGameLatestSaveAsync(game, snapshot.CurrentDevice, cloudSettings);
+                CloudSummary =
+                    $"Downloaded compressed save from {config.Settings.CloudSettings.Backend.Bucket}/{result.RootKey}";
+                StatusMessage = $"Restored latest cloud save for {game.Name}.";
+                await RefreshSelectedGameCloudStatusAsync(forceReload: true);
+            });
+    }
+
+    [RelayCommand]
     private async Task DownloadSelectedCloudBackupZipAsync()
     {
         if (!TryGetSelectedCloudContext(out var game, out var config, out _, out var cloudSettings))

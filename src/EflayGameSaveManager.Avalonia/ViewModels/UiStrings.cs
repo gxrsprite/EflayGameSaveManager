@@ -26,6 +26,7 @@ public sealed class UiStrings
         ResetForm = english ? "Reset Form" : "重置表单";
         SyncCurrentSave = english ? "Sync Current Save To Cloud" : "同步当前存档到云端";
         RestoreFromCloud = english ? "Restore From Cloud" : "从云端恢复";
+        RestoreLatestFromCloud = english ? "Restore Latest Cloud Save" : "恢复云端最新存档";
         RunGame = english ? "Run Game" : "启动游戏";
         OpenGameFolder = english ? "Open Game Folder" : "打开游戏目录";
         SaveDeviceSettings = english ? "Save Current Device Settings" : "保存当前设备设置";
@@ -111,6 +112,7 @@ public sealed class UiStrings
     public string ResetForm { get; }
     public string SyncCurrentSave { get; }
     public string RestoreFromCloud { get; }
+    public string RestoreLatestFromCloud { get; }
     public string RunGame { get; }
     public string OpenGameFolder { get; }
     public string SaveDeviceSettings { get; }
