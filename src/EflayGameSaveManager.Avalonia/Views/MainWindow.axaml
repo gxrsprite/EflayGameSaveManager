@@ -193,19 +193,6 @@
                                     <TextBlock Text="{Binding Strings.RestoreFromCloud}"/>
                                 </StackPanel>
                             </Button>
-                            <Button Command="{Binding RestoreSelectedGameLatestSaveCommand}"
-                                    IsEnabled="{Binding SelectedGameCanSync}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Viewbox Width="18" Height="18" VerticalAlignment="Center">
-                                        <Canvas Width="24" Height="24">
-                                            <Path Classes="icon-stroke"
-                                                  Data="M4,12 A8,8 0 1 0 20,12 A8,8 0 1 0 4,12 M12,7 L12,12 L15,14"
-                                                  Fill="Transparent"/>
-                                        </Canvas>
-                                    </Viewbox>
-                                    <TextBlock Text="{Binding Strings.RestoreLatestFromCloud}"/>
-                                </StackPanel>
-                            </Button>
                             <Button Content="{Binding Strings.RunGame}"
                                     Command="{Binding RunCurrentGameCommand}"
                                     IsEnabled="{Binding HasSelectedGame}" />

@@ -163,15 +163,15 @@ public sealed class CloudSyncService
         GameSaveTargetPlatform? targetPlatformOverride = null)
     {
         AppLogger.Info(
-            $"Cloud restore-current start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
+            $"Cloud restore-latest start: game={game.Name}, device={currentDevice.DeviceName}[{currentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
         var backups = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken)
                       ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
-        var currentBackup = ResolveCurrentBackup(backups, currentDevice.DeviceId)
-                            ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
+        var latestBackup = ResolveLatestBackup(backups)
+                           ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
         AppLogger.Info(
-            $"Cloud restore-current resolved head: game={game.Name}, device={currentDevice.DeviceId}, backupDate={currentBackup.Date}, backupPath={currentBackup.Path}");
+            $"Cloud restore-latest resolved backup: game={game.Name}, device={currentDevice.DeviceId}, backupDate={latestBackup.Date}, backupDevice={latestBackup.DeviceId}, backupPath={latestBackup.Path}");
 
-        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, currentBackup, cancellationToken, targetPlatformOverride);
+        return await RestoreGameBackupAsync(game, currentDevice, cloudSettings, latestBackup, cancellationToken, targetPlatformOverride);
     }
 
     public async Task<CloudDownloadResult> RestoreGameLatestSaveAsync(
