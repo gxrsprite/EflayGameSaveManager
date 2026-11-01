@@ -81,8 +81,6 @@ src/EflayGameSaveManager.Maui/libs/*.aar
 
 # === NativeAOT publish output ===
 publish-aot/
-artifacts/
-distribution.private/
 
 # == Git ===
 *.orig
