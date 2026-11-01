@@ -5,6 +5,7 @@ import com.eflay.gamesavemanager.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import java.io.File
 
 class ConfigService(private val context: Context) {
@@ -33,7 +34,10 @@ class ConfigService(private val context: Context) {
     }
 
     suspend fun saveConfig(configPath: String, config: ManagerConfig) = withContext(Dispatchers.IO) {
-        saveConfigRaw(configPath, json.encodeToString(ManagerConfig.serializer(), config))
+        val encoded = json.parseToJsonElement(json.encodeToString(ManagerConfig.serializer(), config))
+        val file = File(configPath)
+        val old = if (file.exists()) json.parseToJsonElement(file.readText()) else null
+        saveConfigRaw(configPath, json.encodeToString(JsonElement.serializer(), mergeConfig(old, encoded)))
     }
 
     fun saveConfigRaw(configPath: String, rawJson: String) {
@@ -214,6 +218,9 @@ class ConfigService(private val context: Context) {
         config.devices.entries.firstOrNull { it.value.name == "Android" }?.key?.let {
             return it
         }
+
+        config.devices.entries.filter { it.value.platform.equals(PLATFORM_ANDROID, ignoreCase = true) }
+            .singleOrNull()?.key?.let { return it }
 
         // Fallback: return the first device ID or generate a stable one
         return config.devices.keys.firstOrNull()

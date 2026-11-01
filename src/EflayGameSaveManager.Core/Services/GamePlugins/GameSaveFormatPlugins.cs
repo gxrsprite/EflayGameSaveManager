@@ -24,11 +24,14 @@ public static class GameSaveFormatPlugins
         foreach (var file in Directory.EnumerateFiles(stagingRoot, "*", SearchOption.AllDirectories)
                      .OrderBy(path => path, StringComparer.Ordinal))
         {
+            var sourceTime = File.GetLastWriteTimeUtc(file);
             var raw = File.ReadAllBytes(file);
             if (!plugin.TryToCanonical(Path.GetFileName(file), raw, out var canonicalName, out var canonicalBytes))
             {
                 continue;
             }
+
+            canonicalBytes = plugin.PrepareCanonicalForTransfer(canonicalName, canonicalBytes, sourceTime);
 
             var directory = Path.GetDirectoryName(file)!;
             var canonicalPath = Path.Combine(directory, canonicalName);
@@ -42,6 +45,7 @@ public static class GameSaveFormatPlugins
 
                 File.Move(file, canonicalPath);
             }
+            File.SetLastWriteTimeUtc(canonicalPath, sourceTime);
         }
     }
 
@@ -78,16 +82,17 @@ public static class GameSaveFormatPlugins
             var raw = File.ReadAllBytes(file);
             var fileName = Path.GetFileName(file);
 
-            // Already in target form? leave it.
-            if (IsTargetForm(plugin, target, fileName, raw))
-            {
-                continue;
-            }
-
             if (!plugin.TryToCanonical(fileName, raw, out var canonicalName, out var canonicalBytes))
             {
                 continue;
             }
+
+            var sourceTime = File.GetLastWriteTimeUtc(file);
+            var prepared = plugin.PrepareCanonicalForTransfer(canonicalName, canonicalBytes, sourceTime);
+            // Existing target-format archives still need missing metadata repaired.
+            if (prepared.AsSpan().SequenceEqual(canonicalBytes) && IsTargetForm(plugin, target, fileName, raw))
+                continue;
+            canonicalBytes = prepared;
 
             var encoded = plugin.FromCanonical(canonicalBytes, target);
             var targetName = plugin.ToTargetName(canonicalName, target);
@@ -103,6 +108,7 @@ public static class GameSaveFormatPlugins
 
                 File.Move(file, targetPath);
             }
+            File.SetLastWriteTimeUtc(targetPath, sourceTime);
         }
     }
 

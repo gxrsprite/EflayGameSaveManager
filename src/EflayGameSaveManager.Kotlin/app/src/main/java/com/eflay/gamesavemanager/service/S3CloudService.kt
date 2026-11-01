@@ -5,6 +5,7 @@ import com.eflay.gamesavemanager.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -80,6 +81,12 @@ class S3CloudService {
                     isAnyDeviceHead = backups.DeviceHeads[entry.DeviceId]?.let { it == entry.Date } == true
                 )
             }
+    }
+
+    suspend fun updateBackupDescription(game: GameSnapshot, cloudSettings: CloudSettings, date: String, deviceId: String, description: String) = withContext(Dispatchers.IO) {
+        val key = "${getGameRootKey(cloudSettings, game.name)}/Backups.json"
+        val raw = tryDownloadUtf8String(cloudSettings.backend, key) ?: throw IllegalStateException("云端存档列表不存在，请刷新。")
+        uploadUtf8Json(cloudSettings.backend, key, updateBackupDescriptionManifest(raw, date, deviceId, description))
     }
 
     suspend fun uploadCurrentSave(

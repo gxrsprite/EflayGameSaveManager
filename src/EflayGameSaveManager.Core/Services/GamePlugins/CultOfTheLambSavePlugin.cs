@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Globalization;
+using System.Text.Json;
 using EflayGameSaveManager.Core.Models;
 
 namespace EflayGameSaveManager.Core.Services.GamePlugins;
@@ -384,6 +386,40 @@ public sealed class CultOfTheLambSavePlugin : IGameSaveFormatPlugin
 
         // Unknown file (e.g. Prefs.dict): passthrough.
         return false;
+    }
+
+    public byte[] PrepareCanonicalForTransfer(string entryName, byte[] canonicalJson, DateTime sourceLastWriteUtc)
+    {
+        var name = StripJsonExtension(Path.GetFileName(entryName));
+        if (!name.StartsWith("meta_", StringComparison.Ordinal) ||
+            !int.TryParse(name.AsSpan(5), NumberStyles.None, CultureInfo.InvariantCulture, out _))
+            return canonicalJson;
+
+        using var document = JsonDocument.Parse(canonicalJson);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+            return canonicalJson;
+        if (root.TryGetProperty("SaveDate", out var date) && date.ValueKind == JsonValueKind.String &&
+            date.TryGetDateTime(out var parsed) && parsed.Year > 1)
+            return canonicalJson;
+
+        // Old PC builds omit SaveDate entirely; newer ports display DateTime.MinValue
+        // as year 0001. Use the original file/archive time, never the restore time.
+        if (sourceLastWriteUtc.Year <= 1)
+            throw new InvalidDataException("无法确定咩咩启示录存档的保存时间，请检查来源文件时间。");
+        using var output = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(output))
+        {
+            writer.WriteStartObject();
+            foreach (var property in root.EnumerateObject())
+                if (!property.NameEquals("SaveDate")) property.WriteTo(writer);
+            // The game's slot card formats DateTime directly without ToLocalTime().
+            // Include the local offset so its JSON reader produces a local DateTime,
+            // while retaining the same instant for transfers between time zones.
+            writer.WriteString("SaveDate", new DateTimeOffset(sourceLastWriteUtc.ToUniversalTime()).ToLocalTime());
+            writer.WriteEndObject();
+        }
+        return output.ToArray();
     }
 
     public byte[] FromCanonical(byte[] canonicalJson, GameSaveTargetPlatform target)

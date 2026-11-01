@@ -85,7 +85,7 @@ public sealed class GameLibraryService
             .Select(path => (path.Key, path.Value))
             .ToList();
 
-        if (!saveUnit.Paths.ContainsKey(currentDevice.DeviceId))
+        if (!saveUnit.Paths.ContainsKey(currentDevice.DeviceId) && saveUnit.LinkedUnitIds.Count == 0)
         {
             paths.Add((currentDevice.DeviceId, _currentDeviceService.GetEffectiveCurrentDevicePath(saveUnit, currentDevice.DeviceId)));
         }

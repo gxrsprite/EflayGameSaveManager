@@ -4,11 +4,17 @@
              x:Class="EflayGameSaveManager.Maui.App">
     <Application.Resources>
         <ResourceDictionary>
-            <Color x:Key="AccentColor">#2E6F40</Color>
-            <Color x:Key="SurfaceColor">#F3F1EA</Color>
-            <Color x:Key="PanelColor">#FFFDF7</Color>
-            <Color x:Key="TextColor">#2D2A26</Color>
-            <Color x:Key="MutedTextColor">#5E5A52</Color>
+            <Color x:Key="AccentColor">#4A90D9</Color>
+            <Color x:Key="SurfaceColor">#F5F5F5</Color>
+            <Color x:Key="PanelColor">#FFFFFF</Color>
+            <Color x:Key="TextColor">#1C1B1F</Color>
+            <Color x:Key="MutedTextColor">#626A73</Color>
+            <Style TargetType="Label"><Setter Property="TextColor" Value="{StaticResource TextColor}" /></Style>
+            <Style TargetType="Button"><Setter Property="BackgroundColor" Value="{StaticResource AccentColor}" /><Setter Property="TextColor" Value="White" /><Setter Property="CornerRadius" Value="10" /></Style>
+            <Style TargetType="Entry"><Setter Property="TextColor" Value="{StaticResource TextColor}" /><Setter Property="BackgroundColor" Value="#F7F9FC" /></Style>
+            <Style TargetType="Editor"><Setter Property="TextColor" Value="{StaticResource TextColor}" /></Style>
+            <Style TargetType="Picker"><Setter Property="TextColor" Value="{StaticResource TextColor}" /><Setter Property="TitleColor" Value="{StaticResource MutedTextColor}" /></Style>
+            <Style TargetType="Border"><Setter Property="StrokeShape" Value="RoundRectangle 12" /></Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -24,16 +24,6 @@ class WorkspaceService(private val context: Context) {
             trySeedFromAssets(ConfigService.RUNTIME_FILE_NAME, runtimePath)
         }
 
-        // Pitfall #11/#12: normalize on every startup so stale mobile configs
-        // from older APK installs get merged duplicate units cleaned up.
-        if (File(configPath).exists()) {
-            val config = configService.loadConfig(configPath)
-            val normalized = configService.normalizeConfig(config)
-            if (normalized != config) {
-                configService.saveConfig(configPath, normalized)
-            }
-        }
-
         configPath
     }
 

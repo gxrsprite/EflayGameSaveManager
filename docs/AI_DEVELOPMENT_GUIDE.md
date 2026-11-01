@@ -2,6 +2,8 @@
 
 本文档面向后续维护者和 AI 编程助手。目标是让读者即使暂时没有项目代码，也能理解本软件的作用、数据格式、核心流程，并能复刻出功能相近的游戏存档管理工具。
 
+Folder / ZIP 的 `contents_only`、归档布局、跨设备关联单元和往返稳定性约定见 [ZIP_FOLDER_LAYOUT.md](ZIP_FOLDER_LAYOUT.md)。实现 ZIP 同步时应复用 `ZipSaveLayoutService`，不要绕过开关直接上传或写回原 ZIP。
+
 ## 1. 软件定位
 
 Eflay Game Save Manager 是一个游戏存档管理器，用一份共享 JSON 配置维护：
@@ -319,6 +321,8 @@ save_data/
 
 ### 8.1 本地存档 Zip 管理
 
+备份描述编辑由 `BackupDescriptionEditor` 统一处理，`LocalSaveService.UpdateBackupDescriptionAsync` 和 `CloudSyncService.UpdateGameBackupDescriptionAsync` 只更新所选清单条目的 `describe`，允许清空和多行文本。必须严格匹配 `date` 与 `device_id`（旧备份的空设备 ID 也严格匹配）；没有匹配或存在重复身份时拒绝写入，禁止回退到同时间的其他设备。保持 ZIP、路径、大小、父节点、设备头和 sync_version 不变；编辑描述不更新恢复/同步进度。桌面端分别编辑本地和云端描述，安卓端编辑云端描述，两种历史不会隐式互相覆盖。UI 刷新后保留所编辑条目的选择，切换游戏时清除旧选择。回归测试见 `BackupDescriptionTests`。
+
 对应文件：
 
 - `Services/LocalSaveService.cs`
@@ -560,6 +564,16 @@ Core 使用 `S3CompatibleCloudStorageClient`。Lazarus 使用 `UPascalS3Client.p
   - 查看云备份列表（设备 ID 显示为设备名称）
   - 下载/恢复/删除云备份
   - 重建云备份索引
+- NFS9 / NFS Most Wanted (2005) 个人存档工具：编辑档案名、金钱、个人总赏金；也可以按存档当前黑名单阶段应用 Boss Ready 比赛/里程碑进度模板。模板只写入参考修改器定义的进度区段，自动保留档案名、金钱、车库、车辆与高于阶段门槛的已获赏金；执行前创建带时间戳的源文件备份并修复文件校验值。
+
+NFS9 Boss Ready 规则与实现：
+
+- 模板数据位于 Core 的 `Assets/NfsMwBossReady/stage01.json` 到 `stage15.json`，构建时嵌入程序集；按存档 `CurrentBin`（`0x4038`）选择对应阶段，无需手动选择阶段。
+- 只接受已验证的 63,596 字节 NFS MW PC 存档和阶段范围 `1..15`。加载模板时逐一校验阶段、七个固定区段的边界与数据长度；任何不匹配都在写盘前停止。
+- 区段边界来自参考修改器 `core/career_transplant.py: TRANSPLANT_SPANS`：`0x0034..0x4034`、`0x4038..0x4039`、`0x403D..0x429D`、`0x42B9..0x5241`、`0x5241..0x5739`、`0x5B41..0x5B42`、`0x5B62..0x5B64`。不能扩大这些范围，因为黑名单档案、玩家财产与车辆记录不属于进度模板。
+- 阶段模板含参考修改器的最低总赏金。如果玩家当前总赏金低于门槛，只补足已售车辆历史赏金；不降低总赏金，也不改动车库中的车辆赏金。
+- MAUI 复用 Core 编辑器，Kotlin 独立实现同一格式并在 Gradle 构建时从 Core 资源复制相同的 15 个模板。安卓受限路径先暂存单个个人存档，再将备份和修改依次写回；临时目录只用于该次操作。
+- Kotlin 新安装的默认配置来自 MAUI 项目配置。已安装应用可从 MAUI 导出配置后导入，也可在 root Shizuku 可用时直接读取 MAUI 当前配置；导入先备份原配置。Kotlin 不再按存档类型自动合并不同存档单元，写配置时保留未建模的 JSON 字段。
 - 添加游戏：
   - 必填游戏名称
   - 可选游戏可执行文件路径

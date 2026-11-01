@@ -88,7 +88,7 @@ public sealed class SaveUnitDefinition
     public List<string> Exclude { get; set; } = [];
 
     /// <summary>
-    /// When true, only the folder's contents are synced — the folder's own name is not
+    /// Applies to Folder and Zip units. When true, only the folder's contents are synced — the folder's own name is not
     /// stored in the archive and the target folder name is irrelevant on restore.
     /// Use this when devices use different directory names for the same save location
     /// (e.g. PC <c>...\Cult Of The Lamb\saves</c> vs Android <c>.../user</c>).

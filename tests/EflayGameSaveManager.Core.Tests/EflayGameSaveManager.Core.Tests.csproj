@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -20,6 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\src\EflayGameSaveManager.Maui\Services\MobileConfigNormalizer.cs" Link="Mobile\MobileConfigNormalizer.cs" />
+    <Compile Include="..\..\src\EflayGameSaveManager.Maui\Services\AndroidGameSnapshotFactory.cs" Link="Mobile\AndroidGameSnapshotFactory.cs" />
+    <Compile Include="..\..\src\EflayGameSaveManager.Maui\Services\MobileSaveUnitEditor.cs" Link="Mobile\MobileSaveUnitEditor.cs" />
+    <None Include="..\..\distribution\cotl\*.json" Link="PublicProfile\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\GameSaveManager.config.json" Link="GameSaveManager.config.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

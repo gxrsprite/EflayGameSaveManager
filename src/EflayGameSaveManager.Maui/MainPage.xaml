@@ -1,12 +1,24 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:viewModels="clr-namespace:EflayGameSaveManager.Maui.ViewModels"
+             xmlns:services="clr-namespace:EflayGameSaveManager.Maui.Services"
              x:Class="EflayGameSaveManager.Maui.MainPage"
              x:Name="RootPage"
              x:DataType="viewModels:MainPageViewModel"
              BackgroundColor="{StaticResource SurfaceColor}"
              Title="Game Save Sync">
+    <ContentPage.Resources>
+        <DataTemplate x:Key="CloudBackupRowTemplate" x:DataType="viewModels:CloudBackupChoice">
+            <Border BackgroundColor="#F2F7FC" Stroke="#E0EBF6" StrokeShape="RoundRectangle 10" Padding="10" Margin="0,0,0,6">
+                <VerticalStackLayout Spacing="3">
+                    <Label Text="{Binding Backup.Date}" FontAttributes="Bold" />
+                    <Label Text="{Binding Details}" FontSize="12" TextColor="{StaticResource MutedTextColor}" />
+                    <Label Text="{Binding Description}" FontSize="13" LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+        </DataTemplate>
+    </ContentPage.Resources>
     <Grid>
         <Grid RowDefinitions="Auto,Auto,*">
             <Grid Grid.Row="0"
@@ -68,6 +80,15 @@
                                     <Label Text="{Binding SelectedGameTitle}" FontSize="18" FontAttributes="Bold" />
                                     <Label Text="{Binding SelectedGameSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" />
                                     <Editor Text="{Binding CloudDetails}" AutoSize="TextChanges" IsReadOnly="True" MinimumHeightRequest="80" BackgroundColor="#EDF4F7" FontSize="12" />
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding CloudBackups}" BindableLayout.ItemTemplate="{StaticResource CloudBackupRowTemplate}" />
+                                    <Picker Title="选择要修改描述的存档" ItemsSource="{Binding CloudBackups}"
+                                            SelectedItem="{Binding SelectedCloudBackup, Mode=TwoWay}" ItemDisplayBinding="{Binding Label, x:DataType=viewModels:CloudBackupChoice}" />
+                                    <VerticalStackLayout Spacing="6" IsVisible="{Binding HasSelectedCloudBackup}">
+                                        <Label Text="存档描述（留空可清除）" FontSize="12" />
+                                        <Editor Text="{Binding CloudBackupDescription, Mode=TwoWay}" AutoSize="TextChanges"
+                                                MinimumHeightRequest="70" MaximumHeightRequest="160" />
+                                        <Button Text="保存描述" Command="{Binding SaveCloudBackupDescriptionCommand}" />
+                                    </VerticalStackLayout>
                                     <VerticalStackLayout Spacing="6">
                                         <Button Text="Refresh cloud" Command="{Binding RefreshCloudCommand}" />
                                         <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
@@ -103,20 +124,29 @@
                                 <Picker Title="Save unit type"
                                         ItemsSource="{Binding SaveUnitTypeOptions}"
                                         SelectedItem="{Binding SelectedSaveUnitType}" />
+                                <HorizontalStackLayout Spacing="8">
+                                    <Switch IsToggled="{Binding AddZipMode}" />
+                                    <Label Text="ZIP 模式" VerticalOptions="Center" />
+                                </HorizontalStackLayout>
                                 <Label IsVisible="{Binding IsZipSaveUnitTypeSelected}"
-                                       Text="Zip mode does not store a fixed Android path. Upload will ask for a zip file, and restore will ask where to save the restored zip."
+                                       Text="选择 ZIP 文件后，备份会读取该文件，恢复会写回原文件并保留旧 ZIP 备份。"
                                        FontSize="12"
                                        TextColor="{StaticResource MutedTextColor}"
                                        LineBreakMode="WordWrap" />
                                 <Entry Text="{Binding AddSavePath}"
-                                       Placeholder="Save file path or save folder path"
-                                       IsVisible="{Binding IsPathBasedSaveUnitTypeSelected}" />
+                                       Placeholder="Save file path or save folder path" />
                                 <Grid ColumnDefinitions="*,*"
-                                      ColumnSpacing="10"
-                                      IsVisible="{Binding IsPathBasedSaveUnitTypeSelected}">
-                                    <Button Grid.Column="0" Text="Pick file" Command="{Binding PickSaveFileCommand}" />
-                                    <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSaveFolderCommand}" />
+                                      ColumnSpacing="10">
+                                    <Button Grid.Column="0" Text="{Binding AddFilePickerText}" Command="{Binding PickSaveFileCommand}" />
+                                    <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSaveFolderCommand}" IsEnabled="{Binding IsPathBasedSaveUnitTypeSelected}" />
                                 </Grid>
+                                <Button Text="自定义选择路径（含 /data/data）" Command="{Binding PickCustomSavePathCommand}" />
+                                <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsAddContainerMode}">
+                                    <Switch IsToggled="{Binding AddContentsOnly}" />
+                                    <Label Text="只同步文件夹内容（content 模式）" FontSize="12" VerticalOptions="Center" />
+                                </HorizontalStackLayout>
+                                <Label Text="开启：去掉最外层文件夹，只保留内容；关闭：保留原文件夹名。Folder 和 ZIP 使用相同规则。"
+                                       IsVisible="{Binding IsAddContainerMode}" FontSize="11" LineBreakMode="WordWrap" />
                                 <Entry Text="{Binding AddGamePath}" Placeholder="Game launch path (optional)" />
                                 <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                                     <Button Grid.Column="0" Text="Create" Command="{Binding AddGameCommand}" />
@@ -156,6 +186,24 @@
                                 <Label Text="{Binding SelectedGameTitle}" FontSize="20" FontAttributes="Bold" />
                                 <Label Text="{Binding SelectedGameSummary}" FontSize="12" TextColor="{StaticResource MutedTextColor}" LineBreakMode="WordWrap" />
                                 <Editor Text="{Binding SelectedGameDetails}" AutoSize="TextChanges" IsReadOnly="True" MinimumHeightRequest="140" BackgroundColor="#FFF8EE" />
+                                <Border IsVisible="{Binding IsNfs9Selected}" BackgroundColor="#EEF5FF" StrokeThickness="0" Padding="12">
+                                    <VerticalStackLayout Spacing="8">
+                                        <Label Text="极品飞车9 · 个人存档修改" FontAttributes="Bold" FontSize="16" />
+                                        <Label Text="请先退出游戏。选择个人存档后可修改档案名、金钱、总赏金和当前黑名单挑战条件；写入前会备份。" FontSize="12" LineBreakMode="WordWrap" />
+                                        <Button Text="查找个人存档" Command="{Binding FindNfsProfilesCommand}" />
+                                        <Picker Title="选择个人存档" ItemsSource="{Binding NfsProfiles}" SelectedItem="{Binding SelectedNfsProfile}" ItemDisplayBinding="{Binding ProfileName, x:DataType=services:MobileNfsProfileChoice}" />
+                                        <Button Text="读取所选存档" Command="{Binding ReadNfsProfileCommand}" />
+                                        <VerticalStackLayout IsVisible="{Binding NfsProfileLoaded}" Spacing="6">
+                                            <Label Text="档案名（ASCII，最多 16 字符）" /><Entry Text="{Binding NfsAlias}" MaxLength="16" />
+                                            <Label Text="金钱" /><Entry Text="{Binding NfsMoney}" Keyboard="Numeric" />
+                                            <Label Text="个人总赏金" /><Entry Text="{Binding NfsBounty}" Keyboard="Numeric" />
+                                            <Label Text="{Binding NfsStage, StringFormat='当前黑名单阶段：{0}'}" />
+                                            <Button Text="保存修改并备份" Command="{Binding SaveNfsProfileCommand}" />
+                                            <Button Text="满足比赛和里程碑条件" Command="{Binding MakeNfsBossReadyCommand}" />
+                                        </VerticalStackLayout>
+                                        <Label Text="{Binding NfsStatus}" FontSize="12" LineBreakMode="WordWrap" />
+                                    </VerticalStackLayout>
+                                </Border>
                                 <Border BackgroundColor="#F7FBF4" StrokeThickness="0" Padding="12">
                                     <VerticalStackLayout Spacing="10">
                                         <Label Text="Android paths for this game" FontSize="16" FontAttributes="Bold" />
@@ -164,22 +212,31 @@
                                                 SelectedItem="{Binding SelectedSaveUnitTarget}"
                                                 ItemDisplayBinding="{Binding Label}" />
                                         <Entry Text="{Binding EditSavePath}" Placeholder="Android save file path or folder path" />
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Switch IsToggled="{Binding EditZipMode}" AutomationId="EditZipMode" />
+                                            <Label Text="ZIP 模式" VerticalOptions="Center" />
+                                        </HorizontalStackLayout>
+                                        <Label Text="开启后请选择 ZIP 文件；备份读取原文件，恢复写回原文件并保留旧 ZIP 备份。"
+                                               IsVisible="{Binding EditZipMode}" FontSize="12" LineBreakMode="WordWrap" />
                                         <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                                            <Button Grid.Column="0" Text="Pick file" Command="{Binding PickSelectedSaveFileCommand}" />
-                                            <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSelectedSaveFolderCommand}" />
+                                            <Button Grid.Column="0" Text="{Binding EditFilePickerText}" Command="{Binding PickSelectedSaveFileCommand}" />
+                                            <Button Grid.Column="1" Text="Pick folder" Command="{Binding PickSelectedSaveFolderCommand}" IsEnabled="{Binding IsEditPathMode}" />
                                         </Grid>
+                                        <Button Text="自定义选择路径（含 /data/data）" Command="{Binding PickSelectedCustomSavePathCommand}" />
                                         <Entry Text="{Binding EditGamePath}" Placeholder="Android game launch path (optional)" />
-                                        <Entry Text="{Binding EditExcludePatterns}" Placeholder="Exclude patterns, e.g. settings*; Prefs.dict" />
+                                        <Entry Text="{Binding EditExcludePatterns}" Placeholder="Exclude patterns, e.g. settings*; Prefs.dict" IsVisible="{Binding IsEditPathMode}" />
                                         <Label Text="Matching files are never packed on backup and never overwritten on restore."
                                                FontSize="11"
                                                TextColor="{StaticResource MutedTextColor}"
                                                LineBreakMode="WordWrap" />
-                                        <HorizontalStackLayout Spacing="8">
+                                        <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsEditContainerMode}">
                                             <Switch IsToggled="{Binding EditContentsOnly}" />
-                                            <Label Text="Sync folder contents only (ignore folder name)"
+                                            <Label Text="只同步文件夹内容（content 模式）"
                                                    FontSize="12"
                                                    VerticalOptions="Center" />
                                         </HorizontalStackLayout>
+                                        <Label Text="开启：去掉最外层文件夹，只保留内容；关闭：保留原文件夹名。Folder 和 ZIP 使用相同规则。"
+                                               IsVisible="{Binding IsEditContainerMode}" FontSize="11" LineBreakMode="WordWrap" />
                                         <Button Text="Save Android paths" Command="{Binding SaveSelectedGamePathsCommand}" />
                                     </VerticalStackLayout>
                                 </Border>
@@ -189,6 +246,15 @@
                                     <Button Text="Restore latest" Command="{Binding RestoreCurrentCommand}" />
                                 </VerticalStackLayout>
                                 <Editor Text="{Binding CloudDetails}" AutoSize="TextChanges" IsReadOnly="True" MinimumHeightRequest="120" BackgroundColor="#EDF4F7" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding CloudBackups}" BindableLayout.ItemTemplate="{StaticResource CloudBackupRowTemplate}" />
+                                <Picker Title="选择要修改描述的存档" ItemsSource="{Binding CloudBackups}"
+                                        SelectedItem="{Binding SelectedCloudBackup, Mode=TwoWay}" ItemDisplayBinding="{Binding Label, x:DataType=viewModels:CloudBackupChoice}" />
+                                <VerticalStackLayout Spacing="6" IsVisible="{Binding HasSelectedCloudBackup}">
+                                    <Label Text="存档描述（留空可清除）" FontSize="12" />
+                                    <Editor Text="{Binding CloudBackupDescription, Mode=TwoWay}" AutoSize="TextChanges"
+                                            MinimumHeightRequest="70" MaximumHeightRequest="160" />
+                                    <Button Text="保存描述" Command="{Binding SaveCloudBackupDescriptionCommand}" />
+                                </VerticalStackLayout>
                             </VerticalStackLayout>
                         </Border>
                     </VerticalStackLayout>
@@ -203,6 +269,7 @@
                                 <Button Grid.Column="0" Text="Reload" Command="{Binding LoadConfigTextCommand}" />
                                 <Button Grid.Column="1" Text="Save" Command="{Binding SaveConfigTextCommand}" />
                             </Grid>
+                            <Button Text="导出当前配置供 Kotlin 导入" Command="{Binding ExportConfigCommand}" />
                         </VerticalStackLayout>
                     </Border>
                     <Editor Grid.Row="1"

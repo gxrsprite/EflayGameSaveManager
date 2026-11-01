@@ -1,6 +1,7 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:EflayGameSaveManager.Avalonia.ViewModels"
+        xmlns:core="using:EflayGameSaveManager.Core.Services"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
@@ -220,6 +221,48 @@
                             </Border>
                         </Grid>
 
+                        <Border IsVisible="{Binding IsNfsMwSelected}"
+                                Background="#F7F8FF" BorderBrush="#C9D1F4" BorderThickness="1" CornerRadius="12" Padding="12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="{Binding Strings.BuiltInTools}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
+                                <TabControl>
+                                    <TabItem Header="{Binding Strings.NfsPersonal}">
+                                        <StackPanel Spacing="10" Margin="10">
+                                            <TextBlock Text="{Binding Strings.NfsPersonalHint}" TextWrapping="Wrap" Foreground="#5F7288"/>
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                                <TextBlock Text="{Binding Strings.SelectNfsProfile}" VerticalAlignment="Center"/>
+                                                <ComboBox Grid.Column="1" ItemsSource="{Binding NfsSaveChoices}" SelectedItem="{Binding SelectedNfsSaveChoice}">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="core:NfsMwPersonalProfile">
+                                                            <TextBlock Text="{Binding ProfileName}"/>
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                            </Grid>
+                                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
+                                                <TextBlock Text="{Binding Strings.ProfileAlias}" VerticalAlignment="Center"/>
+                                                <TextBox Grid.Column="1" Text="{Binding NfsProfileAlias}" MaxLength="16" Watermark="ASCII, max 16 characters"/>
+                                                <TextBlock Grid.Row="1" Text="{Binding Strings.ProfileMoney}" VerticalAlignment="Center"/>
+                                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding NfsProfileMoney}" Watermark="0..4294967295"/>
+                                                <TextBlock Grid.Row="2" Text="{Binding Strings.ProfileTotalBounty}" VerticalAlignment="Center"/>
+                                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding NfsProfileBounty}" Watermark="0 or more"/>
+                                            </Grid>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Strings.ProfileBlacklistStage}" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding NfsProfileBlacklistStage}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                <Button Content="{Binding Strings.MakeBossReady}" Command="{Binding MakeNfsProfileBossReadyCommand}" IsEnabled="{Binding CanSaveNfsProfile}"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Button Content="{Binding Strings.LoadProfile}" Command="{Binding LoadNfsPersonalProfileCommand}"/>
+                                                <Button Content="{Binding Strings.SaveProfile}" Command="{Binding SaveNfsPersonalProfileCommand}" IsEnabled="{Binding CanSaveNfsProfile}"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding NfsProfileStatus}" TextWrapping="Wrap" Foreground="#5F7288"/>
+                                        </StackPanel>
+                                    </TabItem>
+                                </TabControl>
+                            </StackPanel>
+                        </Border>
+
                         <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="12">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="{Binding Strings.CurrentGameExecutable}" FontWeight="SemiBold" Foreground="#1B2A3A"/>
@@ -315,12 +358,19 @@
                                                         <TextBlock Grid.Column="1" Text="{Binding HeadBadge}" Foreground="#18794E"/>
                                                     </Grid>
                                                     <TextBlock Text="{Binding Path}" TextWrapping="Wrap" Foreground="#5F7288"/>
-                                                    <TextBlock Text="{Binding Describe, StringFormat=Describe: {0}}" Foreground="#5F7288"/>
+                                                    <TextBlock Text="{Binding Describe, StringFormat=Describe: {0}}" TextWrapping="Wrap" Foreground="#5F7288"/>
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
+                                <StackPanel Spacing="6" IsVisible="{Binding HasSelectedCloudBackup}">
+                                    <TextBlock Text="{Binding Strings.BackupDescription}" Foreground="#5F7288" />
+                                    <TextBox Text="{Binding CloudBackupDescription, Mode=TwoWay}" AcceptsReturn="True"
+                                             TextWrapping="Wrap" MinHeight="64" MaxHeight="140" />
+                                    <Button Content="{Binding Strings.SaveBackupDescription}"
+                                            Command="{Binding SaveCloudBackupDescriptionCommand}" />
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -404,12 +454,19 @@
                                                         <TextBlock Grid.Column="1" Text="{Binding HeadBadge}" Foreground="#18794E"/>
                                                     </Grid>
                                                     <TextBlock Text="{Binding Path}" TextWrapping="Wrap" Foreground="#5F7288"/>
-                                                    <TextBlock Text="{Binding Describe, StringFormat=Describe: {0}}" Foreground="#5F7288"/>
+                                                    <TextBlock Text="{Binding Describe, StringFormat=Describe: {0}}" TextWrapping="Wrap" Foreground="#5F7288"/>
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
+                                <StackPanel Spacing="6" IsVisible="{Binding HasSelectedLocalBackup}">
+                                    <TextBlock Text="{Binding Strings.BackupDescription}" Foreground="#5F7288" />
+                                    <TextBox Text="{Binding LocalBackupDescription, Mode=TwoWay}" AcceptsReturn="True"
+                                             TextWrapping="Wrap" MinHeight="64" MaxHeight="140" />
+                                    <Button Content="{Binding Strings.SaveBackupDescription}"
+                                            Command="{Binding SaveLocalBackupDescriptionCommand}" />
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

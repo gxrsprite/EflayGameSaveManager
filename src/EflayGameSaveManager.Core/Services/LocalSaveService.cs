@@ -161,6 +161,15 @@ public sealed class LocalSaveService
         }
     }
 
+    public async Task UpdateBackupDescriptionAsync(
+        string gameName, string backupRoot, string date, string deviceId, string? description)
+    {
+        var manifest = await TryLoadManifestAsync(backupRoot, gameName)
+            ?? throw new InvalidOperationException($"No local backups found for '{gameName}'.");
+        var updated = BackupDescriptionEditor.Update(manifest, date, deviceId, description);
+        await SaveManifestAsync(backupRoot, CloudStoragePathHelper.SanitizeSegment(gameName), updated);
+    }
+
     public Task RestoreBackupAsync(
         GameSnapshot game,
         string backupRoot,

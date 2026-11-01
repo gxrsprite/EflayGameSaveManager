@@ -85,7 +85,7 @@ object ShizukuHelper {
                 "cp $src ${escapeShell(tempDest.absolutePath)}"
 
             Log.d(TAG, "copyFromRestricted: $cmd")
-            val result = runShell(cmd)
+            val result = runShell("$cmd && chmod -R a+rwX ${escapeShell(tempDest.absolutePath)}")
             if (result.success && tempDest.exists()) tempDest else null
         }
 

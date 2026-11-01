@@ -8,9 +8,7 @@ namespace EflayGameSaveManager.Core.Services;
 
 public sealed class ArchiveTransferService
 {
-    private const string RgsmArchiveV2Comment = "RGSM_ARCHIVE_V2\n{\"version\":2,\"compression\":\"deflate\"}";
     private const string RegistryExportFileName = "registry.reg";
-    private static readonly byte[] EndOfCentralDirectorySignature = [0x50, 0x4b, 0x05, 0x06];
     private readonly WinRegistryTransferService _registryTransferService = new();
 
     public string CreateCurrentDeviceArchive(
@@ -21,6 +19,10 @@ public sealed class ArchiveTransferService
         Directory.CreateDirectory(workingDirectory);
         var stagingDirectory = Path.Combine(workingDirectory, "content");
         Directory.CreateDirectory(stagingDirectory);
+        var configuredUnits = game.SaveUnits.Where(unit => unit.Paths.Any(path =>
+            path.DeviceId == currentDevice.DeviceId && !string.IsNullOrWhiteSpace(path.Path))).ToArray();
+        if (configuredUnits.Any(unit => unit.UnitType == SaveUnitType.Zip) && configuredUnits.Length != 1)
+            throw new InvalidOperationException("每个设备的 ZIP 模式只能配置一个存档单元，不能与其他存档单元混合备份。");
         var includedUnits = game.SaveUnits
             .Select(saveUnit => new
             {
@@ -33,10 +35,14 @@ public sealed class ArchiveTransferService
                 CanIncludePath(item.SaveUnit.UnitType, item.CurrentPath.Path))
             .ToArray();
 
-        // Pure Zip mode: all units are Zip type → return the zip file directly
-        if (includedUnits.Length > 0 && includedUnits.All(item => item.SaveUnit.UnitType == SaveUnitType.Zip))
+        // ZIP and Folder use the same stable unit wrapper and content-mode metadata.
+        if (includedUnits.Any(item => item.SaveUnit.UnitType == SaveUnitType.Zip))
         {
-            return includedUnits[0].CurrentPath!.Path;
+            if (includedUnits.Length != 1)
+                throw new InvalidOperationException("每个设备的 ZIP 模式只能配置一个存档单元，不能与其他存档单元混合备份。");
+            var item = includedUnits[0];
+            return ZipSaveLayoutService.CreateUploadArchive(item.CurrentPath!.Path, workingDirectory,
+                item.SaveUnit.Id, item.SaveUnit.ContentsOnly);
         }
 
         if (includedUnits.Length == 0)
@@ -120,7 +126,10 @@ public sealed class ArchiveTransferService
             }
         }
 
-        WriteZipComment(archivePath, RgsmArchiveV2Comment);
+        ZipSaveLayoutService.WriteArchiveMetadata(archivePath, includedUnits
+            .Where(item => item.SaveUnit.UnitType == SaveUnitType.Folder)
+            .Select(item => new ZipSaveLayoutService.UnitLayout(item.SaveUnit.Id,
+                Path.GetFileName(item.CurrentPath!.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)), item.SaveUnit.ContentsOnly)));
         return archivePath;
     }
 
@@ -137,7 +146,7 @@ public sealed class ArchiveTransferService
         CurrentDeviceContext currentDevice,
         GameSaveTargetPlatform? targetPlatformOverride = null)
     {
-        // Zip type: save downloaded zip directly to target path without extraction
+        // Export ZIP payloads using the destination unit's content mode.
         var zipUnits = game.SaveUnits
             .Where(u => u.UnitType == SaveUnitType.Zip)
             .Select(u => new { Unit = u, Path = u.Paths.FirstOrDefault(p => string.Equals(p.DeviceId, currentDevice.DeviceId, StringComparison.Ordinal)) })
@@ -146,13 +155,16 @@ public sealed class ArchiveTransferService
 
         if (zipUnits.Length > 0)
         {
+            if (game.SaveUnits.Count(unit => unit.Paths.Any(path => path.DeviceId == currentDevice.DeviceId && !string.IsNullOrWhiteSpace(path.Path))) != 1)
+                throw new InvalidOperationException("每个设备的 ZIP 模式只能配置一个存档单元，不能与其他存档单元混合恢复。");
             var zipWorkRoot = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager", "zip-restore", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(zipWorkRoot);
             try
             {
-                var normalizedArchivePath = NormalizeZipArchiveForMobileRestore(archivePath, zipWorkRoot);
                 foreach (var item in zipUnits)
                 {
+                    var normalizedArchivePath = NormalizeZipArchiveForMobileRestore(archivePath, zipWorkRoot,
+                        item.Unit.ContentsOnly, item.Unit.Id, Path.GetFileNameWithoutExtension(item.Path!.Path));
                     var targetDir = Path.GetDirectoryName(item.Path!.Path);
                     if (!string.IsNullOrWhiteSpace(targetDir)) Directory.CreateDirectory(targetDir);
                     FileCopyHelper.CopyFile(normalizedArchivePath, item.Path.Path);
@@ -260,11 +272,10 @@ public sealed class ArchiveTransferService
                     // "content" is an archive-internal wrapper only: its children always go
                     // straight into the target folder. Never create target/content.
                     var contentFolder = Path.Combine(sourceRoot, "content");
-                    var actualSource = Directory.Exists(contentFolder)
+                    var actualSource = Directory.Exists(contentFolder) &&
+                        ZipSaveLayoutService.ReadUnitContentsOnly(archivePath, Path.GetFileName(sourceRoot)) != false
                         ? contentFolder // stable contents-only layout (flag-independent)
-                        : (localUnit.ContentsOnly
-                            ? ResolveContentsOnlyRoot(sourceRoot, localPath.Path)
-                            : ResolveFolderContentRoot(sourceRoot, localPath.Path));
+                        : ResolveFolderContentRoot(sourceRoot, localPath.Path, localUnit.ContentsOnly);
                     CopyDirectory(actualSource, localPath.Path, localUnit.Exclude);
                     AppLogger.Info($"Restore unit {localUnit.Id}: copied folder {actualSource} -> {localPath.Path} (contentsOnly={localUnit.ContentsOnly})");
                 }
@@ -335,48 +346,28 @@ public sealed class ArchiveTransferService
         return int.TryParse(Path.GetFileName(path), out _);
     }
 
-    private static string ResolveFolderContentRoot(string sourceRoot, string targetPath)
+    private static string ResolveFolderContentRoot(string sourceRoot, string targetPath, bool contentsOnly)
     {
         var childDirectories = Directory.GetDirectories(sourceRoot);
         var childFiles = Directory.GetFiles(sourceRoot);
         if (childFiles.Length == 0 && childDirectories.Length == 1)
         {
             var targetName = Path.GetFileName(targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            if (string.Equals(Path.GetFileName(childDirectories[0]), targetName, StringComparison.OrdinalIgnoreCase))
+            // Older Android archives keep the source folder (e.g. 0/user/*).
+            // A contents-only target must unwrap it even when it is named differently
+            // from the PC destination (saves), otherwise the game reads stale root files.
+            if (contentsOnly || string.Equals(Path.GetFileName(childDirectories[0]), targetName, StringComparison.OrdinalIgnoreCase))
             {
                 return childDirectories[0];
             }
         }
 
-        // Name differs: keep the archived original wrapper (folder mode), so e.g.
+        // Name differs in folder mode: keep the archived original wrapper, so e.g.
         // restoring saves/ to target user/ results in user/saves/ rather than user/.
         return sourceRoot;
     }
 
-    private static string ResolveContentsOnlyRoot(string sourceRoot, string targetPath)
-    {
-        var childDirectories = Directory.GetDirectories(sourceRoot);
-        var childFiles = Directory.GetFiles(sourceRoot);
-        if (childFiles.Length == 0 && childDirectories.Length == 1)
-        {
-            var childName = Path.GetFileName(childDirectories[0]);
-            var targetName = Path.GetFileName(targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-
-            // Older mobile clients archived the physical folder ("user") even when
-            // the unit was marked contents-only. Treat both common save-folder names
-            // as transport wrappers so Android -> PC restores land at the save root.
-            if (string.Equals(childName, targetName, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(childName, "user", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(childName, "saves", StringComparison.OrdinalIgnoreCase))
-            {
-                return childDirectories[0];
-            }
-        }
-
-        return sourceRoot;
-    }
-
-    private static void ExtractArchive(string archivePath, string extractRoot)
+    internal static void ExtractArchive(string archivePath, string extractRoot)
     {
         using var archive = ArchiveFactory.OpenArchive(archivePath);
         var options = new ExtractionOptions
@@ -384,7 +375,7 @@ public sealed class ArchiveTransferService
             ExtractFullPath = true,
             Overwrite = true,
             PreserveAttributes = false,
-            PreserveFileTime = false
+            PreserveFileTime = true
         };
 
         foreach (var entry in archive.Entries.Where(entry => !entry.IsDirectory))
@@ -439,81 +430,8 @@ public sealed class ArchiveTransferService
             (source, destination) => FileCopyHelper.CopyFile(source, destination));
     }
 
-    public string NormalizeZipArchiveForMobileRestore(string archivePath, string workingDirectory)
-    {
-        var extractRoot = Path.Combine(workingDirectory, "extract");
-        Directory.CreateDirectory(extractRoot);
-        ExtractArchive(archivePath, extractRoot);
+    public string NormalizeZipArchiveForMobileRestore(string archivePath, string workingDirectory,
+        bool contentsOnly = false, int? unitId = null, string? fallbackFolderName = null) =>
+        ZipSaveLayoutService.CreateRestoreZip(archivePath, workingDirectory, contentsOnly, unitId, fallbackFolderName);
 
-        var rootFiles = Directory.GetFiles(extractRoot);
-        var rootDirectories = Directory.GetDirectories(extractRoot);
-        if (rootFiles.Length > 0 ||
-            rootDirectories.Length != 1 ||
-            !IsNumericDirectoryName(rootDirectories[0]))
-        {
-            return archivePath;
-        }
-
-        var normalizedArchivePath = Path.Combine(workingDirectory, "mobile-restore.zip");
-        if (File.Exists(normalizedArchivePath))
-        {
-            FileCopyHelper.DeleteFileIfExists(normalizedArchivePath);
-        }
-
-        // Keep this fixed to ordinary ZIP deflate for mobile zip restore exports,
-        // regardless of future archive compression presets elsewhere.
-        ZipFile.CreateFromDirectory(
-            rootDirectories[0],
-            normalizedArchivePath,
-            CompressionLevel.Optimal,
-            includeBaseDirectory: false);
-        return normalizedArchivePath;
-    }
-
-    private static void WriteZipComment(string archivePath, string comment)
-    {
-        var commentBytes = System.Text.Encoding.UTF8.GetBytes(comment);
-        if (commentBytes.Length > ushort.MaxValue)
-        {
-            throw new InvalidOperationException("ZIP comment is too long.");
-        }
-
-        using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-        var endOfCentralDirectoryOffset = FindEndOfCentralDirectoryOffset(stream)
-            ?? throw new InvalidDataException($"ZIP end of central directory was not found: {archivePath}");
-
-        stream.Position = endOfCentralDirectoryOffset + 20;
-        stream.WriteByte((byte)(commentBytes.Length & 0xff));
-        stream.WriteByte((byte)(commentBytes.Length >> 8));
-        stream.SetLength(endOfCentralDirectoryOffset + 22 + commentBytes.Length);
-        stream.Position = endOfCentralDirectoryOffset + 22;
-        stream.Write(commentBytes, 0, commentBytes.Length);
-    }
-
-    private static long? FindEndOfCentralDirectoryOffset(FileStream stream)
-    {
-        const int minimumEndOfCentralDirectorySize = 22;
-        var searchLength = (int)Math.Min(stream.Length, minimumEndOfCentralDirectorySize + ushort.MaxValue);
-        if (searchLength < minimumEndOfCentralDirectorySize)
-        {
-            return null;
-        }
-
-        var buffer = new byte[searchLength];
-        stream.Position = stream.Length - searchLength;
-        stream.ReadExactly(buffer);
-
-        for (var index = searchLength - minimumEndOfCentralDirectorySize; index >= 0; index--)
-        {
-            if (buffer[index] == EndOfCentralDirectorySignature[0] &&
-                buffer[index + 1] == EndOfCentralDirectorySignature[1] &&
-                buffer[index + 2] == EndOfCentralDirectorySignature[2] &&
-                buffer[index + 3] == EndOfCentralDirectorySignature[3])
-            {
-                return stream.Length - searchLength + index;
-            }
-        }
-
-        return null;
-    }
 }

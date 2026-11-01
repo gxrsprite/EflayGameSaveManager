@@ -42,6 +42,7 @@ public sealed class CurrentDeviceService
     public IReadOnlyList<CurrentDevicePathInfo> GetCurrentDevicePaths(GameDefinition game, string deviceId)
     {
         return game.SavePaths
+            .Where(unit => unit.LinkedUnitIds.Count == 0 || unit.Paths.ContainsKey(deviceId))
             .Select(unit => new CurrentDevicePathInfo(
                 unit.Id,
                 unit.UnitType,

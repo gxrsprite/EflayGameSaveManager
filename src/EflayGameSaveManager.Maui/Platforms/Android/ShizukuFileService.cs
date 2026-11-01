@@ -51,8 +51,12 @@ public static class ShizukuFileService
         // source contents explicitly ("src/." -> "dest/").
         var isDir = restrictedPath.EndsWith('/') || await IsDirectoryViaShellAsync(restrictedPath);
         var cmd = isDir
-            ? $"mkdir -p '{EscapeShell(tempDest)}' && cp -r '{EscapeShell(restrictedPath)}'/. '{EscapeShell(tempDest)}'/"
-            : $"cp '{EscapeShell(restrictedPath)}' '{EscapeShell(tempDest)}'";
+            ? $"mkdir -p '{EscapeShell(tempDest)}' && cp -r --preserve=timestamps '{EscapeShell(restrictedPath)}'/. '{EscapeShell(tempDest)}'/"
+            : $"cp --preserve=timestamps '{EscapeShell(restrictedPath)}' '{EscapeShell(tempDest)}'";
+        // A root-owned source directory can be mode 0700. cp retains that mode even
+        // without --preserve=mode, leaving the app unable to traverse its own staged
+        // copy. Only relax this disposable copy inside the app's private cache.
+        cmd += $" && chmod -R a+rwX '{EscapeShell(tempDest)}'";
 
         Debug.WriteLine($"[Shizuku] copyFromRestricted: {cmd}");
 
@@ -89,8 +93,8 @@ public static class ShizukuFileService
         // toybox `cp -T` fails when DEST already exists as a directory (always the case
         // on restore), so merge contents with "src/." -> "dest/".
         var cmd = Directory.Exists(sourcePath)
-            ? $"mkdir -p '{EscapeShell(restrictedPath)}' && cp -r '{EscapeShell(sourcePath)}'/. '{EscapeShell(restrictedPath)}'/"
-            : $"cp '{EscapeShell(sourcePath)}' '{EscapeShell(restrictedPath)}'";
+            ? $"mkdir -p '{EscapeShell(restrictedPath)}' && cp -r --preserve=timestamps '{EscapeShell(sourcePath)}'/. '{EscapeShell(restrictedPath)}'/"
+            : $"cp --preserve=timestamps '{EscapeShell(sourcePath)}' '{EscapeShell(restrictedPath)}'";
 
         Debug.WriteLine($"[Shizuku] copyToRestricted: {cmd}");
 
@@ -104,6 +108,29 @@ public static class ShizukuFileService
             }
             return true;
         });
+    }
+
+    /// <summary>Retain an exact duplicate left by the old folder-wrapper restore bug.</summary>
+    public static async Task<string?> ArchiveDuplicateRestoreWrapperAsync(string stagedDirectory, string targetDirectory)
+    {
+        if (!Directory.Exists(stagedDirectory) || !Directory.EnumerateFiles(stagedDirectory, "*", SearchOption.AllDirectories).Any())
+            return null;
+        var name = Path.GetFileName(targetDirectory.TrimEnd('/'));
+        if (string.IsNullOrWhiteSpace(name) || !IsRestrictedPath(targetDirectory)) return null;
+        var nested = targetDirectory.TrimEnd('/') + "/" + name;
+        if (!await IsDirectoryViaShellAsync(nested)) return null;
+        var backupRoot = Path.Combine(FileSystem.AppDataDirectory, "restore-layout-backups", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(backupRoot);
+        var backup = Path.Combine(backupRoot, name);
+        // diff checks all file bytes and directory entries; differing/newer saves stay
+        // untouched. Rename into private persistent storage instead of deleting data.
+        var command = $"test ! -L '{EscapeShell(nested)}' && diff -qr '{EscapeShell(stagedDirectory)}' '{EscapeShell(nested)}' >/dev/null 2>&1 && mv '{EscapeShell(nested)}' '{EscapeShell(backup)}'";
+        var result = await Task.Run(() => ShizukuInterop.RunShellCommand(command));
+        if (result.ExitCode != 0) return null;
+        await Task.Run(() => ShizukuInterop.RunShellCommand($"chmod -R a+rwX '{EscapeShell(backup)}'"));
+        await File.WriteAllTextAsync(Path.Combine(backupRoot, "RESTORE.txt"),
+            $"Duplicate folder retained after restore.\nOriginal: {nested}\nBackup: {backup}\n");
+        return backup;
     }
 
     public static bool IsRestrictedPath(string path)

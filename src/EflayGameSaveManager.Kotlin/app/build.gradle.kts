@@ -5,6 +5,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val prepareSharedAssets by tasks.registering(Sync::class) {
+    from("src/main/assets") { exclude("GameSaveManager.config.json") }
+    from("../../EflayGameSaveManager.Maui/GameSaveManager.config.json")
+    from("../../EflayGameSaveManager.Core/Assets/NfsMwBossReady") { into("nfs_mw_boss_ready") }
+    into(layout.buildDirectory.dir("generated/sharedAssets"))
+}
+
 android {
     namespace = "com.eflay.gamesavemanager"
     compileSdk = 36
@@ -36,7 +43,11 @@ android {
     buildFeatures {
         compose = true
     }
+    sourceSets.getByName("main").assets.setSrcDirs(listOf(layout.buildDirectory.dir("generated/sharedAssets")))
 }
+
+tasks.named("preBuild").configure { dependsOn(prepareSharedAssets) }
+tasks.withType<Test>().configureEach { systemProperty("nfsTemplatesDir", file("../../EflayGameSaveManager.Core/Assets/NfsMwBossReady").absolutePath) }
 
 dependencies {
     // Compose BOM
@@ -67,6 +78,7 @@ dependencies {
     // Shizuku for elevated file access (Maven Central)
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    testImplementation("junit:junit:4.13.2")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

@@ -215,6 +215,61 @@ public sealed class SavePathFilterTests
         }
     }
 
+    [Theory]
+    [InlineData("user")]
+    [InlineData("shizuku-user")]
+    [InlineData("saves")]
+    public void ContentsOnly_RestoresLegacyFolderArchiveIntoDestinationRoot(string sourceFolder)
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var source = Path.Combine(root, "phone", sourceFolder);
+            var target = Path.Combine(root, "pc", "saves");
+            Directory.CreateDirectory(Path.Combine(source, "world"));
+            Directory.CreateDirectory(target);
+            File.WriteAllText(Path.Combine(source, "slot_0"), "day-17");
+            File.WriteAllText(Path.Combine(source, "world", "data"), "nested-progress");
+            File.WriteAllText(Path.Combine(source, "settings"), "phone-settings");
+            File.WriteAllText(Path.Combine(target, "slot_0"), "day-16");
+            File.WriteAllText(Path.Combine(target, "settings"), "pc-settings");
+
+            var service = new ArchiveTransferService();
+            var archive = service.CreateCurrentDeviceArchive(
+                FolderGame(source, [], contentsOnly: false), Device(), Path.Combine(root, "work"));
+            service.RestoreCurrentDeviceArchive(
+                archive, FolderGame(target, ["settings*"], contentsOnly: true), Device());
+
+            Assert.Equal("day-17", File.ReadAllText(Path.Combine(target, "slot_0")));
+            Assert.Equal("nested-progress", File.ReadAllText(Path.Combine(target, "world", "data")));
+            Assert.Equal("pc-settings", File.ReadAllText(Path.Combine(target, "settings")));
+            Assert.False(Directory.Exists(Path.Combine(target, sourceFolder)));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void ContentsOnly_PreservesSinglePayloadSubdirectoryInsideContentWrapper()
+    {
+        var root = NewTempDirectory();
+        try
+        {
+            var source = Path.Combine(root, "phone", "user");
+            var target = Path.Combine(root, "pc", "saves");
+            Directory.CreateDirectory(Path.Combine(source, "world"));
+            File.WriteAllText(Path.Combine(source, "world", "data"), "nested-progress");
+            var service = new ArchiveTransferService();
+            var archive = service.CreateCurrentDeviceArchive(
+                FolderGame(source, [], contentsOnly: true), Device(), Path.Combine(root, "work"));
+
+            service.RestoreCurrentDeviceArchive(archive, FolderGame(target, [], contentsOnly: true), Device());
+
+            Assert.Equal("nested-progress", File.ReadAllText(Path.Combine(target, "world", "data")));
+            Assert.False(File.Exists(Path.Combine(target, "data")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void Restore_ContentWrapperNeverBecomesTargetSubfolder()
     {
@@ -239,37 +294,6 @@ public sealed class SavePathFilterTests
 
             Assert.Equal("canonical", File.ReadAllText(Path.Combine(target, "slot_0")));
             Assert.False(Directory.Exists(Path.Combine(target, "content")));
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
-
-    [Fact]
-    public void Restore_ContentsOnlyUnwrapsLegacyUserFolder()
-    {
-        var root = NewTempDirectory();
-        try
-        {
-            var archive = Path.Combine(root, "phone.zip");
-            var extract = Path.Combine(root, "0", "user");
-            var target = Path.Combine(root, "pc", "saves");
-            Directory.CreateDirectory(extract);
-            Directory.CreateDirectory(target);
-            File.WriteAllText(Path.Combine(extract, "slot_0"), "from-phone");
-            System.IO.Compression.ZipFile.CreateFromDirectory(
-                Path.Combine(root, "0"), archive,
-                System.IO.Compression.CompressionLevel.NoCompression,
-                includeBaseDirectory: false);
-
-            new ArchiveTransferService().RestoreCurrentDeviceArchive(
-                archive,
-                FolderGame(target, [], contentsOnly: true),
-                Device());
-
-            Assert.Equal("from-phone", File.ReadAllText(Path.Combine(target, "slot_0")));
-            Assert.False(Directory.Exists(Path.Combine(target, "user")));
         }
         finally
         {

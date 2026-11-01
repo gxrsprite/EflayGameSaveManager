@@ -34,6 +34,10 @@ public interface IGameSaveFormatPlugin
     /// </summary>
     bool TryToCanonical(string entryName, byte[] raw, out string canonicalName, out byte[] canonicalBytes);
 
+    /// <summary>Repairs platform metadata using the source file time, without changing gameplay data.</summary>
+    byte[] PrepareCanonicalForTransfer(string entryName, byte[] canonicalJson, DateTime sourceLastWriteUtc)
+        => canonicalJson;
+
     byte[] FromCanonical(byte[] canonicalJson, GameSaveTargetPlatform target);
 
     string ToTargetName(string canonicalName, GameSaveTargetPlatform target);

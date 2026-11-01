@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Maui.Storage;
 using EflayGameSaveManager.Core.Models;
 using EflayGameSaveManager.Core.Services;
 using EflayGameSaveManager.Core.Services.GamePlugins;
@@ -23,6 +24,87 @@ public partial class MainPageViewModel : ObservableObject
     private readonly MobileWorkspaceService _workspaceService;
     private readonly FavoriteGamesService _favoriteGamesService;
     private readonly StoragePickerService _storagePickerService;
+    private readonly MobileNfsMwSaveService _nfsEditor = new();
+
+    public ObservableCollection<MobileNfsProfileChoice> NfsProfiles { get; } = [];
+    [ObservableProperty] private MobileNfsProfileChoice? _selectedNfsProfile;
+    [ObservableProperty] private bool _isNfs9Selected;
+    [ObservableProperty] private bool _nfsProfileLoaded;
+    [ObservableProperty] private string _nfsAlias = string.Empty;
+    [ObservableProperty] private string _nfsMoney = string.Empty;
+    [ObservableProperty] private string _nfsBounty = string.Empty;
+    [ObservableProperty] private string _nfsStage = string.Empty;
+    [ObservableProperty] private string _nfsStatus = "请选择并读取个人存档。";
+
+    partial void OnSelectedNfsProfileChanged(MobileNfsProfileChoice? value) => NfsProfileLoaded = false;
+
+    [RelayCommand]
+    private async Task FindNfsProfilesAsync()
+    {
+        if (_currentConfig is null || _currentSnapshot is null || SelectedGame is null) return;
+        var game = _currentConfig.Games.FirstOrDefault(g => g.Name == SelectedGame.Name);
+        var gameName = SelectedGame.Name;
+        var deviceId = _currentSnapshot.CurrentDevice.DeviceId;
+        var paths = game?.SavePaths.Where(u => u.UnitType is SaveUnitType.Folder or SaveUnitType.File)
+            .Select(u => u.Paths.GetValueOrDefault(deviceId)).Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!).ToArray() ?? [];
+        await RunBusyAsync("正在查找 NFS9 个人存档...", async () =>
+        {
+            var profiles = await _nfsEditor.ListAsync(paths);
+            if (SelectedGame?.Name != gameName) return;
+            NfsProfiles.Clear();
+            foreach (var profile in profiles) NfsProfiles.Add(profile);
+            SelectedNfsProfile = null;
+            NfsStatus = profiles.Count == 0 ? "未找到可识别的 PC 版 NFS9 个人存档，请检查安卓路径。" : $"找到 {profiles.Count} 个存档，请选择后读取。";
+        });
+    }
+
+    [RelayCommand]
+    private async Task ReadNfsProfileAsync()
+    {
+        var selected = SelectedNfsProfile;
+        if (selected is null) { NfsStatus = "请先选择个人存档。"; return; }
+        await RunBusyAsync("正在读取个人存档...", async () =>
+        {
+            var profile = await _nfsEditor.ReadAsync(selected.SavePath);
+            if (SelectedNfsProfile == selected) ShowNfsProfile(profile);
+        });
+    }
+
+    [RelayCommand]
+    private async Task SaveNfsProfileAsync()
+    {
+        var selected = SelectedNfsProfile;
+        if (!NfsProfileLoaded || selected is null) return;
+        if (!uint.TryParse(NfsMoney, out var money) || !ulong.TryParse(NfsBounty, out var bounty))
+        { NfsStatus = "金钱和赏金请输入有效的非负整数。"; return; }
+        await RunBusyAsync("正在备份并保存个人存档...", async () =>
+        {
+            var profile = await _nfsEditor.SaveAsync(selected.SavePath, NfsAlias, money, bounty);
+            if (SelectedNfsProfile == selected) { ShowNfsProfile(profile); NfsStatus = "已保存，原存档已备份。"; }
+        });
+    }
+
+    [RelayCommand]
+    private async Task MakeNfsBossReadyAsync()
+    {
+        var selected = SelectedNfsProfile;
+        if (!NfsProfileLoaded || selected is null) return;
+        await RunBusyAsync("正在备份并设置黑名单挑战条件...", async () =>
+        {
+            var profile = await _nfsEditor.ApplyBossReadyAsync(selected.SavePath);
+            if (SelectedNfsProfile == selected) { ShowNfsProfile(profile); NfsStatus = $"已套用黑名单 {NfsStage} 可挑战进度，原存档已备份。"; }
+        });
+    }
+
+    private void ShowNfsProfile(NfsMwPersonalProfile profile)
+    {
+        NfsAlias = profile.Alias;
+        NfsMoney = profile.Money.ToString();
+        NfsBounty = profile.TotalBounty.ToString();
+        NfsStage = profile.CurrentBlacklistStage is >= 1 and <= 15 ? $"#{profile.CurrentBlacklistStage}" : "未知";
+        NfsStatus = $"当前存档：{profile.SavePath}";
+        NfsProfileLoaded = true;
+    }
 
     private ManagerConfig? _currentConfig;
     private AppSnapshot? _currentSnapshot;
@@ -56,6 +138,41 @@ public partial class MainPageViewModel : ObservableObject
     [ObservableProperty]
     private string _cloudDetails = "Cloud status not loaded.";
 
+    public ObservableCollection<CloudBackupChoice> CloudBackups { get; } = [];
+
+    [ObservableProperty]
+    private CloudBackupChoice? _selectedCloudBackup;
+
+    [ObservableProperty]
+    private string _cloudBackupDescription = string.Empty;
+
+    public bool HasSelectedCloudBackup => SelectedCloudBackup is not null;
+
+    partial void OnSelectedCloudBackupChanged(CloudBackupChoice? value)
+    {
+        CloudBackupDescription = value?.Backup.Describe ?? string.Empty;
+        OnPropertyChanged(nameof(HasSelectedCloudBackup));
+    }
+
+    [RelayCommand]
+    private async Task SaveCloudBackupDescriptionAsync()
+    {
+        var backup = SelectedCloudBackup?.Backup;
+        if (backup is null || !TryGetSelectedCloudContext(out var game, out var snapshot, out var settings))
+            return;
+        var description = CloudBackupDescription;
+        await RunBusyAsync("正在保存存档描述...", async () =>
+        {
+            await _cloudSyncService.UpdateGameBackupDescriptionAsync(game, settings, backup.Date, backup.DeviceId, description);
+            if (SelectedGame?.Name == game.Name)
+            {
+                await RefreshCloudCoreAsync(game, snapshot, settings);
+                SelectedCloudBackup = CloudBackups.FirstOrDefault(item => item.Backup.Date == backup.Date && item.Backup.DeviceId == backup.DeviceId);
+            }
+            StatusMessage = "存档描述已保存。";
+        });
+    }
+
     [ObservableProperty]
     private SaveUnitTargetOption? _selectedSaveUnitTarget;
 
@@ -72,6 +189,40 @@ public partial class MainPageViewModel : ObservableObject
     /// <summary>Folder units only: sync the folder's contents and ignore its own name.</summary>
     [ObservableProperty]
     private bool _editContentsOnly;
+
+    [ObservableProperty]
+    private bool _addContentsOnly;
+
+    [ObservableProperty]
+    private bool _editZipMode;
+
+    public bool IsEditPathMode => !EditZipMode;
+    public bool IsEditFolderMode => !EditZipMode && SelectedSaveUnitTarget?.UnitType == SaveUnitType.Folder;
+    public bool IsEditContainerMode => EditZipMode || SelectedSaveUnitTarget?.UnitType == SaveUnitType.Folder;
+    public bool IsAddContainerMode => SelectedSaveUnitType is "Folder" or "Zip";
+    public string EditFilePickerText => EditZipMode ? "选择 ZIP 文件" : "Pick file";
+    public string AddFilePickerText => IsZipSaveUnitTypeSelected ? "选择 ZIP 文件" : "Pick file";
+    public bool AddZipMode { get => IsZipSaveUnitTypeSelected; set => SelectedSaveUnitType = value ? "Zip" : "Folder"; }
+
+    partial void OnEditZipModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsEditPathMode));
+        OnPropertyChanged(nameof(IsEditFolderMode));
+        OnPropertyChanged(nameof(IsEditContainerMode));
+        OnPropertyChanged(nameof(EditFilePickerText));
+    }
+
+    partial void OnSelectedSaveUnitTargetChanged(SaveUnitTargetOption? value)
+    {
+        EditZipMode = value?.UnitType == SaveUnitType.Zip;
+        OnPropertyChanged(nameof(IsEditFolderMode));
+        OnPropertyChanged(nameof(IsEditContainerMode));
+        if (value is null) return;
+        var unit = TryGetSelectedGameDefinition(SelectedGame?.Name ?? "")?.SavePaths.FirstOrDefault(unit => unit.Id == value.SaveUnitId);
+        EditSavePath = unit?.Paths.GetValueOrDefault(_currentSnapshot?.CurrentDevice.DeviceId ?? "") ?? "";
+        EditExcludePatterns = SavePathFilter.FormatPatterns(unit?.Exclude);
+        EditContentsOnly = unit?.ContentsOnly ?? false;
+    }
 
     [ObservableProperty]
     private bool _isBusy;
@@ -180,6 +331,9 @@ public partial class MainPageViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsZipSaveUnitTypeSelected));
         OnPropertyChanged(nameof(IsPathBasedSaveUnitTypeSelected));
+        OnPropertyChanged(nameof(AddZipMode));
+        OnPropertyChanged(nameof(AddFilePickerText));
+        OnPropertyChanged(nameof(IsAddContainerMode));
     }
 
     public async Task InitializeAsync()
@@ -423,6 +577,15 @@ public partial class MainPageViewModel : ObservableObject
     {
         var status = await _cloudSyncService.GetGameCurrentStatusAsync(game, snapshot.CurrentDevice, cloudSettings);
         var backups = await _cloudSyncService.ListGameBackupsAsync(game, snapshot.CurrentDevice, cloudSettings);
+        if (SelectedGame?.Name != game.Name) return;
+        SelectedCloudBackup = null;
+        CloudBackups.Clear();
+        foreach (var backup in backups)
+        {
+            var deviceName = _currentConfig?.Devices.GetValueOrDefault(backup.DeviceId)?.Name ?? backup.DeviceId;
+            CloudBackups.Add(new CloudBackupChoice(backup, deviceName));
+        }
+        SelectedCloudBackup = CloudBackups.FirstOrDefault();
         CloudDetails = BuildCloudDetails(status, backups);
         StatusMessage = $"Cloud status refreshed for {game.Name}.";
     }
@@ -437,25 +600,30 @@ public partial class MainPageViewModel : ObservableObject
 
         if (GameHasZipUnits())
         {
-            var zipSelection = await _storagePickerService.PickZipFileAsync();
-            if (!zipSelection.IsSuccess)
+            if (!CanUseSingleZipUnit()) return;
+            var zipUnit = GetZipUnit();
+            var configuredPath = GetConfiguredZipPath();
+            var selection = string.IsNullOrWhiteSpace(configuredPath)
+                ? await _storagePickerService.PickZipFileAsync()
+                : StorageSelectionResult.Success(configuredPath, "");
+            if (!selection.IsSuccess) { StatusMessage = selection.Message; return; }
+            await RunBusyAsync($"Uploading {game.Name} zip save...", async () =>
             {
-                StatusMessage = zipSelection.Message;
-                return;
-            }
-
-            await RunBusyAsync(
-                $"Uploading {game.Name} zip save...",
-                async () =>
+                var workRoot = Path.Combine(FileSystem.CacheDirectory, "zip-upload", Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workRoot);
+                try
                 {
-                    var result = await _cloudSyncService.UploadGameCurrentSaveAsync(
-                        game,
-                        snapshot.CurrentDevice,
-                        cloudSettings,
-                        zipSelection.Path);
-                    StatusMessage = $"Uploaded zip save to {result.RootKey}.";
+                    var archivePath = Path.Combine(workRoot, "save.zip");
+                    await _storagePickerService.CopyConfiguredZipToLocalAsync(selection.Path, archivePath);
+                    using (var zip = System.IO.Compression.ZipFile.OpenRead(archivePath)) _ = zip.Entries.Count;
+                    var uploadArchive = ZipSaveLayoutService.CreateUploadArchive(archivePath, workRoot,
+                        zipUnit?.Id ?? 0, zipUnit?.ContentsOnly ?? false);
+                    await _cloudSyncService.UploadGameCurrentSaveAsync(game, snapshot.CurrentDevice, cloudSettings, uploadArchive);
                     await RefreshCloudCoreAsync(game, snapshot, cloudSettings);
-                });
+                    StatusMessage = "ZIP 备份上传成功。";
+                }
+                finally { if (Directory.Exists(workRoot)) Directory.Delete(workRoot, true); }
+            });
             return;
         }
 
@@ -479,8 +647,11 @@ public partial class MainPageViewModel : ObservableObject
                         ? _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, snapshot.CurrentDevice.DeviceName, DeviceInfo.Current.Platform.ToString())
                         : snapshot;
 
-                    var result = await _cloudSyncService.UploadGameCurrentSaveAsync(
+                    var uploadGame = AndroidGameSnapshotFactory.Create(
                         uploadSnapshot.Games.First(g => g.Name == game.Name),
+                        TryGetSelectedGameDefinition(game.Name)!, snapshot.CurrentDevice.DeviceId);
+                    var result = await _cloudSyncService.UploadGameCurrentSaveAsync(
+                        uploadGame,
                         snapshot.CurrentDevice, cloudSettings);
                     StatusMessage = $"Uploaded current save to {result.RootKey}.";
                     await RefreshCloudCoreAsync(game, snapshot, cloudSettings);
@@ -488,7 +659,7 @@ public partial class MainPageViewModel : ObservableObject
                 finally
                 {
 #if ANDROID
-                    RestoreStagedPathsForUpload(game.Name, snapshot.CurrentDevice.DeviceId, staged.OriginalPaths);
+                    RestoreOriginalSavePaths(game.Name, snapshot.CurrentDevice.DeviceId, staged.OriginalPaths);
                     CleanupTempDirs(staged.TempDirs);
 #endif
                 }
@@ -505,6 +676,9 @@ public partial class MainPageViewModel : ObservableObject
 
         if (GameHasZipUnits())
         {
+            if (!CanUseSingleZipUnit()) return;
+            var zipUnit = GetZipUnit();
+            var configuredZipPath = GetConfiguredZipPath();
             await RunBusyAsync(
                 $"Downloading {game.Name} latest zip backup...",
                 async () =>
@@ -531,12 +705,20 @@ public partial class MainPageViewModel : ObservableObject
                             downloadedArchivePath,
                             overwrite: true);
 
-                        var normalizedArchivePath = _archiveTransferService.NormalizeZipArchiveForMobileRestore(downloadedArchivePath, workRoot);
-                        await using var archiveStream = File.OpenRead(normalizedArchivePath);
-                        var saveResult = await _storagePickerService.SaveFileAsync($"{game.Name}.zip", archiveStream);
-                        StatusMessage = saveResult.IsSuccess
-                            ? $"Saved restored zip from {result.RootKey}."
-                            : saveResult.Message;
+                        var normalizedArchivePath = _archiveTransferService.NormalizeZipArchiveForMobileRestore(downloadedArchivePath, workRoot,
+                            zipUnit?.ContentsOnly ?? false, zipUnit?.Id, game.Name);
+                        var configuredPath = configuredZipPath;
+                        if (!string.IsNullOrWhiteSpace(configuredPath))
+                        {
+                            await _storagePickerService.WriteConfiguredZipAsync(normalizedArchivePath, configuredPath);
+                            StatusMessage = "ZIP 已恢复到原文件，旧 ZIP 已保留备份。";
+                        }
+                        else
+                        {
+                            await using var archiveStream = File.OpenRead(normalizedArchivePath);
+                            var saveResult = await _storagePickerService.SaveFileAsync($"{game.Name}.zip", archiveStream);
+                            StatusMessage = saveResult.Message;
+                        }
                     }
                     finally
                     {
@@ -578,8 +760,11 @@ public partial class MainPageViewModel : ObservableObject
                         ? _gameLibraryService.CreateSnapshot(_currentConfig, _configPath, snapshot.CurrentDevice.DeviceName, DeviceInfo.Current.Platform.ToString())
                         : snapshot;
 
-                    var result = await _cloudSyncService.RestoreGameLatestSaveAsync(
+                    var restoreGame = AndroidGameSnapshotFactory.Create(
                         restoreSnapshot.Games.First(g => g.Name == game.Name),
+                        TryGetSelectedGameDefinition(game.Name)!, snapshot.CurrentDevice.DeviceId);
+                    var result = await _cloudSyncService.RestoreGameLatestSaveAsync(
+                        restoreGame,
                         snapshot.CurrentDevice, cloudSettings,
                         targetPlatformOverride: targetPlatform);
                     StatusMessage = $"Restored latest cloud save from {result.RootKey}.";
@@ -591,6 +776,8 @@ public partial class MainPageViewModel : ObservableObject
                 finally
                 {
 #if ANDROID
+                    RestoreOriginalSavePaths(game.Name, snapshot.CurrentDevice.DeviceId,
+                        redirectMap.ToDictionary(item => item.SaveUnitId, item => item.OriginalPath));
                     CleanupRedirectMap(redirectMap);
 #endif
                 }
@@ -648,13 +835,13 @@ public partial class MainPageViewModel : ObservableObject
         }
         catch
         {
-            RestoreStagedPathsForUpload(gameName, deviceId, originals);
+            RestoreOriginalSavePaths(gameName, deviceId, originals);
             CleanupTempDirs(tempDirs);
             throw;
         }
     }
 
-    private void RestoreStagedPathsForUpload(string gameName, string deviceId, Dictionary<int, string> originals)
+    private void RestoreOriginalSavePaths(string gameName, string deviceId, Dictionary<int, string> originals)
     {
         if (originals.Count == 0) return;
         var gameDef = _currentConfig?.Games.FirstOrDefault(g =>
@@ -689,8 +876,10 @@ public partial class MainPageViewModel : ObservableObject
                 !IsRestrictedPath(originalPath))
                 continue;
 
-            // Replace restricted path with a temp dir for Core's restore
-            var tempDir = Path.Combine(stagingRoot, $"unit-{unit.Id}");
+            // Preserve the original basename so folder-mode wrapper matching still
+            // works before the staged files are merged back into the real directory.
+            var tempDir = AndroidGameSnapshotFactory.GetRestoreStagingPath(
+                stagingRoot, unit.Id, unit.UnitType, originalPath);
             unit.Paths[deviceId] = tempDir;
             redirects.Add(new RestoreRedirect(originalPath, tempDir, deviceId, unit.Id));
         }
@@ -712,6 +901,11 @@ public partial class MainPageViewModel : ObservableObject
             if (!copied)
             {
                 failures.Add(r.OriginalPath);
+            }
+            else if (Directory.Exists(r.TempDir))
+            {
+                var retained = await Platforms.Android.ShizukuFileService.ArchiveDuplicateRestoreWrapperAsync(r.TempDir, r.OriginalPath);
+                if (retained is not null) AppLogger.Info($"Retained duplicate restore wrapper: {retained}");
             }
         }
 
@@ -771,10 +965,15 @@ public partial class MainPageViewModel : ObservableObject
         }
 
         var isZipMode = IsZipSaveUnitTypeSelected;
+        if (isZipMode && !IsZipSelectionPath(savePath))
+        {
+            StatusMessage = "ZIP 模式需要选择 .zip 文件，也可用自定义路径填写完整 ZIP 路径。";
+            return;
+        }
         var existingGame = _currentConfig.Games.FirstOrDefault(game =>
             string.Equals(game.Name, gameName, StringComparison.OrdinalIgnoreCase));
 
-        if (!isZipMode && string.IsNullOrWhiteSpace(savePath))
+        if (string.IsNullOrWhiteSpace(savePath))
         {
             StatusMessage = "Save path is required.";
             return;
@@ -811,22 +1010,9 @@ public partial class MainPageViewModel : ObservableObject
             {
                 if (isZipMode && existingGame is not null)
                 {
-                    var folderUnit = existingGame.SavePaths.FirstOrDefault(unit => unit.UnitType == SaveUnitType.Folder);
-                    var zipUnit = new SaveUnitDefinition
-                    {
-                        Id = existingGame.NextSaveUnitId,
-                        UnitType = SaveUnitType.Zip,
-                        DeleteBeforeApply = false,
-                        LinkedUnitIds = folderUnit is null ? [] : [folderUnit.Id]
-                    };
-
-                    if (folderUnit is not null && !folderUnit.LinkedUnitIds.Contains(zipUnit.Id))
-                    {
-                        folderUnit.LinkedUnitIds.Add(zipUnit.Id);
-                    }
-
-                    existingGame.SavePaths.Add(zipUnit);
-                    existingGame.NextSaveUnitId++;
+                    var currentUnit = existingGame.SavePaths.FirstOrDefault(unit => unit.Paths.ContainsKey(_currentSnapshot.CurrentDevice.DeviceId));
+                    MobileSaveUnitEditor.Apply(existingGame, _currentSnapshot.CurrentDevice.DeviceId, currentUnit?.Id,
+                        SaveUnitType.Zip, savePath, [], AddContentsOnly);
                 }
                 else
                 {
@@ -839,6 +1025,7 @@ public partial class MainPageViewModel : ObservableObject
                             {
                                 Id = 0,
                                 UnitType = saveUnitType,
+                                ContentsOnly = saveUnitType is SaveUnitType.Folder or SaveUnitType.Zip && AddContentsOnly,
                                 DeleteBeforeApply = false,
                                 Paths = string.IsNullOrWhiteSpace(savePath)
                                     ? []
@@ -863,6 +1050,7 @@ public partial class MainPageViewModel : ObservableObject
                 AddGameName = string.Empty;
                 AddSavePath = string.Empty;
                 AddGamePath = string.Empty;
+                AddContentsOnly = false;
                 SelectedSaveUnitType = "Folder";
                 IsAddGameVisible = false;
                 await ReloadAsync();
@@ -876,7 +1064,7 @@ public partial class MainPageViewModel : ObservableObject
     [RelayCommand]
     private async Task PickZipFileForNewGameAsync()
     {
-        var selection = await _storagePickerService.PickZipFileAsync();
+        var selection = await _storagePickerService.PickConfiguredZipAsync();
         if (!selection.IsSuccess)
         {
             StatusMessage = selection.Message;
@@ -890,20 +1078,48 @@ public partial class MainPageViewModel : ObservableObject
 
     private bool GameHasZipUnits()
     {
-        return SelectedGame?.Game.SaveUnits.Any(unit => unit.UnitType == SaveUnitType.Zip) == true;
+        var definition = TryGetSelectedGameDefinition(SelectedGame?.Name ?? "");
+        var deviceId = _currentSnapshot?.CurrentDevice.DeviceId ?? "";
+        return MobileSaveUnitEditor.FindZip(definition, deviceId) is not null ||
+            definition is not null && !definition.SavePaths.Any(unit => unit.Paths.ContainsKey(deviceId)) &&
+            definition.SavePaths.Any(unit => unit.UnitType == SaveUnitType.Zip);
+    }
+
+    private string? GetConfiguredZipPath()
+    {
+        var deviceId = _currentSnapshot?.CurrentDevice.DeviceId ?? "";
+        return MobileSaveUnitEditor.FindZip(TryGetSelectedGameDefinition(SelectedGame?.Name ?? ""), deviceId)?.Paths.GetValueOrDefault(deviceId);
+    }
+
+    private SaveUnitDefinition? GetZipUnit()
+    {
+        var definition = TryGetSelectedGameDefinition(SelectedGame?.Name ?? "");
+        return MobileSaveUnitEditor.FindZip(definition, _currentSnapshot?.CurrentDevice.DeviceId ?? "")
+            ?? definition?.SavePaths.FirstOrDefault(unit => unit.UnitType == SaveUnitType.Zip && unit.Paths.Count == 0);
+    }
+
+    private bool CanUseSingleZipUnit()
+    {
+        var id = _currentSnapshot?.CurrentDevice.DeviceId ?? "";
+        var count = TryGetSelectedGameDefinition(SelectedGame?.Name ?? "")?.SavePaths
+            .Count(unit => unit.Paths.TryGetValue(id, out var path) && !string.IsNullOrWhiteSpace(path)) ?? 0;
+        if (count <= 1) return true;
+        StatusMessage = "当前设备的 ZIP 模式只能配置一个 ZIP 存档单元，请先移除其他重复的本设备路径。";
+        return false;
     }
 
     [RelayCommand]
     private async Task PickSaveFileAsync()
     {
-        var selection = await _storagePickerService.PickFileAsync();
+        var zipMode = IsZipSaveUnitTypeSelected;
+        var selection = zipMode ? await _storagePickerService.PickConfiguredZipAsync() : await _storagePickerService.PickFileAsync();
         if (!selection.IsSuccess)
         {
             StatusMessage = selection.Message;
             return;
         }
 
-        SelectedSaveUnitType = "File";
+        SelectedSaveUnitType = zipMode ? "Zip" : "File";
         AddSavePath = selection.Path;
         StatusMessage = selection.Message;
     }
@@ -926,14 +1142,14 @@ public partial class MainPageViewModel : ObservableObject
     [RelayCommand]
     private async Task PickSelectedSaveFileAsync()
     {
-        var selection = await _storagePickerService.PickFileAsync();
+        var selection = EditZipMode ? await _storagePickerService.PickConfiguredZipAsync() : await _storagePickerService.PickFileAsync();
         if (!selection.IsSuccess)
         {
             StatusMessage = selection.Message;
             return;
         }
 
-        if (SelectedSaveUnitTarget?.IsNew == true)
+        if (!EditZipMode && SelectedSaveUnitTarget?.IsNew == true)
         {
             SelectedSaveUnitTarget = SaveUnitTargets.FirstOrDefault(option => option.IsNew && option.UnitType == SaveUnitType.File)
                                      ?? SelectedSaveUnitTarget;
@@ -964,6 +1180,22 @@ public partial class MainPageViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task PickCustomSavePathAsync()
+    {
+        var result = await _storagePickerService.PickCustomPathAsync(AddSavePath, SelectedSaveUnitType == "Folder", IsZipSaveUnitTypeSelected);
+        if (result.IsSuccess) AddSavePath = result.Path;
+        StatusMessage = result.Message;
+    }
+
+    [RelayCommand]
+    private async Task PickSelectedCustomSavePathAsync()
+    {
+        var result = await _storagePickerService.PickCustomPathAsync(EditSavePath, IsEditFolderMode, EditZipMode);
+        if (result.IsSuccess) EditSavePath = result.Path;
+        StatusMessage = result.Message;
+    }
+
+    [RelayCommand]
     private async Task SaveSelectedGamePathsAsync()
     {
         if (_currentConfig is null || _currentSnapshot is null || SelectedGame is null)
@@ -980,6 +1212,11 @@ public partial class MainPageViewModel : ObservableObject
 
         var savePath = EditSavePath.Trim();
         var gamePath = EditGamePath.Trim();
+        if (EditZipMode && !IsZipSelectionPath(savePath))
+        {
+            StatusMessage = "ZIP 模式需要选择 .zip 文件，也可用自定义路径填写完整 ZIP 路径。";
+            return;
+        }
         if (string.IsNullOrWhiteSpace(savePath))
         {
             StatusMessage = "Save path is required.";
@@ -1011,40 +1248,10 @@ public partial class MainPageViewModel : ObservableObject
                 }
 
                 var deviceId = _currentSnapshot.CurrentDevice.DeviceId;
-                SaveUnitDefinition targetUnit;
-                if (SelectedSaveUnitTarget.IsNew)
-                {
-                    var compatibleExistingUnit = game.SavePaths
-                        .Where(unit => unit.UnitType == SelectedSaveUnitTarget.UnitType)
-                        .OrderBy(unit => unit.Id)
-                        .FirstOrDefault();
-
-                    if (compatibleExistingUnit is not null)
-                    {
-                        targetUnit = compatibleExistingUnit;
-                    }
-                    else
-                    {
-                        targetUnit = new SaveUnitDefinition
-                        {
-                            Id = game.NextSaveUnitId,
-                            UnitType = SelectedSaveUnitTarget.UnitType,
-                            DeleteBeforeApply = false,
-                            Paths = new Dictionary<string, string>()
-                        };
-                        game.NextSaveUnitId++;
-                        game.SavePaths.Add(targetUnit);
-                    }
-                }
-                else
-                {
-                    targetUnit = game.SavePaths.FirstOrDefault(unit => unit.Id == SelectedSaveUnitTarget.SaveUnitId)
-                                 ?? throw new InvalidOperationException($"Save unit not found: {SelectedSaveUnitTarget.SaveUnitId}");
-                }
-
-                targetUnit.Paths[deviceId] = savePath;
-                targetUnit.Exclude = SavePathFilter.ParsePatterns(EditExcludePatterns);
-                targetUnit.ContentsOnly = EditContentsOnly;
+                var type = EditZipMode ? SaveUnitType.Zip :
+                    SelectedSaveUnitTarget.UnitType == SaveUnitType.Zip ? SaveUnitType.File : SelectedSaveUnitTarget.UnitType;
+                MobileSaveUnitEditor.Apply(game, deviceId, SelectedSaveUnitTarget.SaveUnitId, type,
+                    savePath, SavePathFilter.ParsePatterns(EditExcludePatterns), EditContentsOnly);
 
                 if (string.IsNullOrWhiteSpace(gamePath))
                 {
@@ -1081,6 +1288,20 @@ public partial class MainPageViewModel : ObservableObject
         {
             StatusMessage = $"Failed to load config: {ex.Message}";
         }
+    }
+
+    [RelayCommand]
+    private async Task ExportConfigAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_configPath) || !File.Exists(_configPath))
+        { StatusMessage = "当前配置文件不存在。"; return; }
+        try
+        {
+            await using var stream = File.OpenRead(_configPath);
+            var result = await FileSaver.Default.SaveAsync("GameSaveManager.config.json", stream, CancellationToken.None);
+            StatusMessage = result.IsSuccessful ? "配置已导出，可在 Kotlin 版导入。" : result.IsCancelled ? "已取消导出配置。" : $"导出配置失败：{result.Exception?.Message}";
+        }
+        catch (Exception ex) { StatusMessage = $"导出配置失败：{ex.Message}"; }
     }
 
     [RelayCommand]
@@ -1127,6 +1348,10 @@ public partial class MainPageViewModel : ObservableObject
 
     private void ApplySelectedGame(GameListItemViewModel? item)
     {
+        IsNfs9Selected = item is not null && (string.Equals(item.Name, "NFS9", StringComparison.OrdinalIgnoreCase) || item.Name.Contains("极品飞车9", StringComparison.OrdinalIgnoreCase) || item.Name.Contains("NFS MW 2005", StringComparison.OrdinalIgnoreCase) || (TryGetSelectedGameDefinition(item.Name)?.ChineseName.Contains("极品飞车9", StringComparison.OrdinalIgnoreCase) ?? false));
+        NfsProfiles.Clear(); SelectedNfsProfile = null; NfsProfileLoaded = false; NfsStage = string.Empty;
+        SelectedCloudBackup = null;
+        CloudBackups.Clear();
         if (item is null)
         {
             SelectedGameTitle = "Select a game";
@@ -1163,6 +1388,7 @@ public partial class MainPageViewModel : ObservableObject
 
         SaveUnitTargets.Add(SaveUnitTargetOption.New(SaveUnitType.Folder, "New folder save unit"));
         SaveUnitTargets.Add(SaveUnitTargetOption.New(SaveUnitType.File, "New file save unit"));
+        SaveUnitTargets.Add(SaveUnitTargetOption.New(SaveUnitType.Zip, "New ZIP save unit"));
 
         var selectedGameDefinition = TryGetSelectedGameDefinition(game.Name);
         var deviceId = _currentSnapshot?.CurrentDevice.DeviceId;
@@ -1223,7 +1449,7 @@ public partial class MainPageViewModel : ObservableObject
 
         var selectedGameDefinition = TryGetSelectedGameDefinition(SelectedGame.Name)
                                    ?? throw new InvalidOperationException($"Game not found: {SelectedGame.Name}");
-        game = CreateAndroidScopedGameSnapshot(SelectedGame.Game, selectedGameDefinition, _currentSnapshot.CurrentDevice.DeviceId);
+        game = AndroidGameSnapshotFactory.Create(SelectedGame.Game, selectedGameDefinition, _currentSnapshot.CurrentDevice.DeviceId);
         snapshot = _currentSnapshot;
         return true;
     }
@@ -1281,7 +1507,7 @@ public partial class MainPageViewModel : ObservableObject
         return builder.ToString().TrimEnd();
     }
 
-    private static string BuildCloudDetails(GameCloudStatus status, IReadOnlyList<CloudGameBackup> backups)
+    private string BuildCloudDetails(GameCloudStatus status, IReadOnlyList<CloudGameBackup> backups)
     {
         var builder = new StringBuilder();
         builder.AppendLine($"Game: {status.GameName}");
@@ -1289,32 +1515,7 @@ public partial class MainPageViewModel : ObservableObject
         builder.AppendLine($"Cloud data exists: {status.IsAvailable}");
         builder.AppendLine($"Current head: {DisplayValue(status.CurrentHead)}");
         builder.AppendLine($"Backup count: {status.BackupCount}");
-        builder.AppendLine();
-        builder.AppendLine("Recent backups:");
-
-        if (backups.Count == 0)
-        {
-            builder.AppendLine("- none");
-        }
-        else
-        {
-            foreach (var backup in backups.Take(8))
-            {
-                builder.Append("- ")
-                    .Append(backup.Date)
-                    .Append(" | ")
-                    .Append(FormatSize(backup.Size))
-                    .Append(" | ")
-                    .Append(backup.DeviceId);
-
-                if (backup.IsCurrentDeviceHead)
-                {
-                    builder.Append(" | current");
-                }
-
-                builder.AppendLine();
-            }
-        }
+        if (backups.Count == 0) builder.AppendLine("暂无云端存档。");
 
         return builder.ToString().TrimEnd();
     }
@@ -1374,6 +1575,9 @@ public partial class MainPageViewModel : ObservableObject
             : string.Empty;
     }
 
+    private static bool IsZipSelectionPath(string path) =>
+        path.StartsWith("content://", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsSupportedAndroidPath(string path)
     {
 #if ANDROID
@@ -1389,57 +1593,7 @@ public partial class MainPageViewModel : ObservableObject
 #endif
     }
 
-    private static GameSnapshot CreateAndroidScopedGameSnapshot(
-        GameSnapshot source,
-        GameDefinition gameDefinition,
-        string currentDeviceId)
-    {
-        var explicitSaveUnits = source.SaveUnits
-            .Where(unit => gameDefinition.SavePaths.Any(definition =>
-                definition.Id == unit.Id &&
-                definition.Paths.TryGetValue(currentDeviceId, out var configuredPath) &&
-                !string.IsNullOrWhiteSpace(configuredPath)))
-            .Select(unit =>
-            {
-                var explicitPath = gameDefinition.SavePaths
-                    .Where(definition => definition.Id == unit.Id)
-                    .SelectMany(definition => definition.Paths)
-                    .Where(path => string.Equals(path.Key, currentDeviceId, StringComparison.OrdinalIgnoreCase))
-                    .Select(path => path.Value)
-                    .FirstOrDefault() ?? string.Empty;
 
-                return unit with
-                {
-                    Paths =
-                    [
-                        new ResolvedDevicePath(
-                            currentDeviceId,
-                            unit.Paths.FirstOrDefault(path => string.Equals(path.DeviceId, currentDeviceId, StringComparison.OrdinalIgnoreCase))?.DeviceName ?? "Android",
-                            explicitPath)
-                    ]
-                };
-            })
-            .ToArray();
-
-        var explicitCurrentDevicePaths = explicitSaveUnits
-            .Select(unit => new CurrentDevicePathInfo(
-                unit.Id,
-                unit.UnitType,
-                unit.Paths[0].Path,
-                unit.DeleteBeforeApply))
-            .ToArray();
-
-        var explicitGamePath = gameDefinition.GamePaths.TryGetValue(currentDeviceId, out var gamePath)
-            ? gamePath
-            : string.Empty;
-
-        return source with
-        {
-            SaveUnits = explicitSaveUnits,
-            CurrentDevicePaths = explicitCurrentDevicePaths,
-            CurrentDeviceGamePath = new CurrentDeviceGamePathInfo(explicitGamePath)
-        };
-    }
 }
 
 public sealed partial class GameListItemViewModel : ObservableObject
@@ -1472,7 +1626,8 @@ public sealed partial class GameListItemViewModel : ObservableObject
     {
         var fileCount = game.SaveUnits.Count(unit => unit.UnitType == SaveUnitType.File);
         var folderCount = game.SaveUnits.Count(unit => unit.UnitType == SaveUnitType.Folder);
-        return $"{folderCount} folder, {fileCount} file";
+        var zipCount = game.SaveUnits.Count(unit => unit.UnitType == SaveUnitType.Zip);
+        return $"{folderCount} folder, {fileCount} file, {zipCount} ZIP";
     }
 }
 

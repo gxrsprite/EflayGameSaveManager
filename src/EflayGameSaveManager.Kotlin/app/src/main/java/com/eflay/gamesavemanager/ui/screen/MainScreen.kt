@@ -27,6 +27,7 @@ import com.eflay.gamesavemanager.ui.component.*
 import com.eflay.gamesavemanager.ui.theme.*
 import com.eflay.gamesavemanager.viewmodel.GameListItem
 import com.eflay.gamesavemanager.viewmodel.MainViewModel
+import com.eflay.gamesavemanager.viewmodel.CloudBackupRow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -217,6 +218,8 @@ private fun GameDetailCompact(viewModel: MainViewModel, state: MainViewModel.UiS
             Button(onClick = { viewModel.uploadCurrent() }, Modifier.weight(1f)) { Text("Upload", fontSize = 12.sp) }
             Button(onClick = { viewModel.restoreCurrent() }, Modifier.weight(1f)) { Text("Restore", fontSize = 12.sp) }
         }
+        CloudBackupPanel(viewModel, state)
+        NfsEditorPanel(viewModel, state)
     }
 }
 
@@ -285,6 +288,63 @@ private fun AllGamesPage(
                 onUploadCurrent = { viewModel.uploadCurrent() },
                 onRestoreCurrent = { viewModel.restoreCurrent() }
             )
+            CloudBackupPanel(viewModel, state)
+            NfsEditorPanel(viewModel, state)
+        }
+    }
+}
+
+@Composable
+private fun NfsEditorPanel(viewModel: MainViewModel, state: MainViewModel.UiState) {
+    if (!state.isNfs9) return
+    var expanded by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CloudDetailBg)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("极品飞车9 · 个人存档修改", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text("请先退出游戏。修改档案名、金钱、总赏金或当前黑名单条件；写入前会备份。", fontSize = 12.sp)
+            Button(onClick = viewModel::findNfsProfiles, enabled = !state.isBusy) { Text("查找个人存档") }
+            Box {
+                OutlinedButton(onClick = { expanded = true }, enabled = state.nfsProfiles.isNotEmpty()) { Text(state.selectedNfsProfile?.name ?: "选择个人存档") }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    state.nfsProfiles.forEach { profile -> DropdownMenuItem(text = { Text(profile.name) }, onClick = { viewModel.selectNfsProfile(profile); expanded = false }) }
+                }
+            }
+            Button(onClick = viewModel::readNfsProfile, enabled = state.selectedNfsProfile != null && !state.isBusy) { Text("读取所选存档") }
+            if (state.nfsLoaded) {
+                OutlinedTextField(value = state.nfsAlias, onValueChange = viewModel::updateNfsAlias, label = { Text("档案名（ASCII）") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = state.nfsMoney, onValueChange = viewModel::updateNfsMoney, label = { Text("金钱") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = state.nfsBounty, onValueChange = viewModel::updateNfsBounty, label = { Text("个人总赏金") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Text("当前黑名单阶段：${state.nfsStage}")
+                Button(onClick = viewModel::saveNfsProfile, enabled = !state.isBusy) { Text("保存修改并备份") }
+                Button(onClick = viewModel::makeNfsBossReady, enabled = !state.isBusy) { Text("满足比赛和里程碑条件") }
+            }
+            Text(state.nfsStatus, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun CloudBackupPanel(viewModel: MainViewModel, state: MainViewModel.UiState) {
+    if (state.cloudBackups.isEmpty()) return
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = PanelColor)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("云端存档", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            state.cloudBackups.forEach { row ->
+                val selected = state.selectedCloudBackup == row
+                Surface(Modifier.fillMaxWidth().clickable { viewModel.selectCloudBackup(row) }, color = if (selected) FavoriteColor else CloudDetailBg, shape = MaterialTheme.shapes.medium) {
+                    Column(Modifier.padding(10.dp)) {
+                        Text(row.backup.date, fontWeight = FontWeight.SemiBold)
+                        val bytes = row.backup.size
+                        val size = when { bytes < 1024 -> "$bytes B"; bytes < 1048576 -> "${"%.1f".format(bytes / 1024.0)} KB"; else -> "${"%.1f".format(bytes / 1048576.0)} MB" }
+                        Text("${row.deviceName} · $size" + if (row.backup.isCurrentDeviceHead) " · 本设备最新" else "", fontSize = 12.sp, color = MutedTextColor)
+                        if (row.backup.describe.isNotBlank()) Text("描述：${row.backup.describe}", fontSize = 13.sp)
+                    }
+                }
+            }
+            if (state.selectedCloudBackup != null) {
+                OutlinedTextField(value = state.cloudBackupDescription, onValueChange = viewModel::updateCloudBackupDescription, label = { Text("存档描述（留空可清除）") }, modifier = Modifier.fillMaxWidth())
+                Button(onClick = viewModel::saveCloudBackupDescription, enabled = !state.isBusy) { Text("保存描述") }
+            }
         }
     }
 }
@@ -299,7 +359,7 @@ private fun ConfigEditorPage(
     var loaded by remember { mutableStateOf(false) }
 
     // Load config content once
-    LaunchedEffect(Unit) {
+    LaunchedEffect(state.configRevision) {
         rawJson = viewModel.loadConfigRaw()
         loaded = true
     }
@@ -308,6 +368,9 @@ private fun ConfigEditorPage(
         Text("Edit GameSaveManager.config.json", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Text(state.configPathSummary, fontSize = 12.sp, color = MutedTextColor)
         Text(state.statusMessage, fontSize = 12.sp, color = AccentColor)
+        OutlinedButton(onClick = { viewModel.importMauiConfiguration() }, modifier = Modifier.fillMaxWidth()) {
+            Text("从已安装的 MAUI 版导入当前配置")
+        }
 
         if (!loaded) {
             CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))

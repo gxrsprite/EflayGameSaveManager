@@ -40,7 +40,18 @@ public sealed class SaveBackupService
                     var deviceDirectory = Path.Combine(targetDirectory, path.DeviceName, saveUnit.Id.ToString());
                     Directory.CreateDirectory(deviceDirectory);
                     var destination = Path.Combine(deviceDirectory, fileName);
-                    await FileCopyHelper.CopyFileAsync(path.Path, destination, cancellationToken);
+                    if (saveUnit.UnitType == SaveUnitType.Zip)
+                    {
+                        var work = Path.Combine(Path.GetTempPath(), "EflayGameSaveManager", "zip-local-backup", Guid.NewGuid().ToString("N"));
+                        try
+                        {
+                            var archive = ZipSaveLayoutService.CreateUploadArchive(path.Path, work, saveUnit.Id, saveUnit.ContentsOnly);
+                            var payload = ZipSaveLayoutService.CreateRestoreZip(archive, work, saveUnit.ContentsOnly, saveUnit.Id, Path.GetFileNameWithoutExtension(path.Path));
+                            await FileCopyHelper.CopyFileAsync(payload, destination, cancellationToken);
+                        }
+                        finally { if (Directory.Exists(work)) Directory.Delete(work, true); }
+                    }
+                    else await FileCopyHelper.CopyFileAsync(path.Path, destination, cancellationToken);
                 }
                 else if (Directory.Exists(path.Path))
                 {

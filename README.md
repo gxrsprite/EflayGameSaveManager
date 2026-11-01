@@ -1,8 +1,14 @@
-﻿# Eflay Game Save Manager
+# Eflay Game Save Manager
 
 Game save manager for keeping local game save paths and cloud backups in one shared configuration.
 
 The recommended app is now the Avalonia desktop version. It can be used independently for normal Windows usage, including creating a new configuration from scratch, adding games, editing save paths, and syncing cloud backups. It also runs on Linux-based gaming systems such as Bazzite and SteamOS (Steam Deck). The Lazarus version is kept as a lightweight fallback to try when Avalonia cannot run in a constrained environment such as some Winlator setups.
+
+## Cult of the Lamb public release
+
+`distribution/cotl` contains a public, credential-free profile with one game, generic `pc`/`android` devices, and separate runtime files selecting PC or Android. Its [configuration guide](distribution/cotl/CONFIG_GUIDE.md) documents the schema, setup steps, AI prompt, Shizuku permissions and save-format limitations (PC 1.5.x MessagePack conversion is not implemented).
+
+On Windows, run `publishscript/publish-cotl-public.ps1` to build a self-contained Windows x64 EXE and Android arm64 APK, verify the public configs including APK assets, scan for known local private identifiers, and create/test a RAR with SHA-256 checksums under `artifacts`. The script requires .NET/MAUI Android tooling, an Android SDK and RAR; SDK/RAR/output paths are parameters. Android retains the normal package ID `com.eflay.gamesavemanager.maui` and app title; only the bundled initial configuration is specialized for this game. Updating an installed app preserves its existing configuration; the public seed is copied only when its app-data files are absent. Builds can select alternative seeds through `BundledConfigPath` and `BundledRuntimePath`; defaults remain the usual local configs.
 
 ## Projects
 
@@ -19,11 +25,17 @@ Shared business logic.
 
 Most UI projects should reuse this project instead of duplicating save/archive/cloud behavior.
 
+Backup descriptions can be edited after a backup is created. On desktop, select a local or cloud backup, edit its description below the list, and choose **Save description**. On Android, refresh cloud backups, choose an entry, edit its description, and save. Empty text clears the description; multiline text is supported. Cloud edits become visible on other devices after refreshing their backup list. Local and cloud histories have separate descriptions; editing one does not change the other.
+
+Descriptions use the existing `describe` field in `Backups.json`; updating them does not rewrite save ZIPs, change backup timestamps, or move device heads.
+
 Archive layout note:
 
 - Desktop archives created by Core/Avalonia write a basic RGSM v2 zip comment: `RGSM_ARCHIVE_V2` plus JSON metadata using `compression:"deflate"`.
 - Non-zip save units are packed under their stable unit-id directory. `Folder` save units also include the selected folder itself, so a path ending in `SAVEDATA` is stored as `0/SAVEDATA/...` for save unit `0`.
 - Restore remains backward-compatible with older flat or no-comment archives and automatically unwraps a single same-named folder, so restoring `SAVEDATA/...` or `0/SAVEDATA/...` to a target `SAVEDATA` path does not create `SAVEDATA/SAVEDATA/...`.
+- For `contents_only: true` targets, legacy folder archives also unwrap a single differently named source folder (`0/user/...` or `0/shizuku-user/...` into PC `saves/...`). Modern `0/content/...` archives preserve the payload's own subdirectories. Folder mode still preserves a differently named archived folder.
+- The desktop main cloud-restore button restores the latest backup across all devices and reports its timestamp. Selecting a particular history entry still restores that exact backup; a PC's older device head must not hide a newer Android upload.
 
 ### `EflayGameSaveManager.Avalonia`
 
@@ -33,6 +45,7 @@ Main and recommended desktop UI built with Avalonia.
 - Can start without an existing `GameSaveManager.config.json`; adding a game writes a new config file.
 - Lists games, save units, current-device paths, executable paths, cloud status, and cloud backup history.
 - Supports per-device external launch programs for each game. Each entry stores a category (for example `Modifier`) and a full executable path.
+- For a game entry named `NFS9` / `极品飞车9`, shows a built-in **Personal** save editor for the NFS Most Wanted (2005) PC save: choose a profile from the save directory, then edit its alias, money, and total bounty. Total bounty follows the reference editor's formula (active garage records plus sold-car history); editing it adjusts the sold-history component and preserves each active car's bounty. The editor can also apply the reference editor's Boss Ready progression for the save's current Blacklist stage, updating its race and milestone conditions while preserving profile identity, money, garage contents, and higher earned bounty. Both save actions create a timestamped copy of the original file and repair the save checksums; the NFS17 entry is not treated as NFS9.
 - Supports instant Chinese/English interface switching. The selection is stored in `GameSaveManager.runtime.json` as `language`; Chinese is the default, except `LOCALHOST` and `GameSir` emulator machine names default to English.
 - Adds new games from the UI.
 - Supports folder saves, file saves, zip saves (`Zip`), and Windows registry saves (`WinRegistry`).
@@ -165,10 +178,13 @@ adb install -r bin\Debug\net10.0-android\com.eflay.gamesavemanager.maui-Signed.a
 - `kotlinx.serialization` 数据模型，`@SerialName` 匹配 C# snake_case JSON
 - S3 兼容云存储 + AWS4-HMAC-SHA256 签名（OkHttp）
 - zip 归档/恢复，兼容 C# `ArchiveTransferService` 格式
-- 收藏（SharedPreferences）、启动配置标准化、设备 ID 解析
+- 收藏与设备 ID 解析；启动时保留已有存档单元，不按类型自动合并
 - SAF 选择器 → `StoragePathResolver` 解析为真实路径
 - `MANAGE_EXTERNAL_STORAGE` + cleartext HTTP
 - **Shizuku 支持**：零外部依赖的反射桥接，`ArchiveService` 内建受限路径自动接管。Header 栏彩色指示器显示 Shizuku 状态（未安装 / 无权限 / ADB / root）
+- 默认内置配置从 MAUI 项目的 `GameSaveManager.config.json` 构建。已有安装保留自己的配置；可在 MAUI 配置页导出当前配置，再通过 Kotlin 配置页导入，或在有 root Shizuku 权限时直接从已安装的 MAUI 版导入。导入前备份 Kotlin 原配置。写入配置时保留 Kotlin 模型不认识的字段和独立存档单元。
+- 云端存档列表显示时间、设备、大小、描述与当前设备标记；选择条目后可修改或清空描述。
+- NFS9 的个人存档工具支持选择 PC 格式的个人存档，编辑档案名、金钱、个人总赏金和当前黑名单阶段的比赛/里程碑条件。保存前请退出游戏；普通路径及 Shizuku 受限路径都会先备份原存档。
 
 构建 & 部署：
 ```bash
@@ -418,13 +434,20 @@ Lite 独立配置文件：
 
 - 新增或编辑存档单元时，将 `unit_type` 设置为 `Zip`。
 - 当前设备路径填写对应的 `.zip` 文件路径。
-- 本地备份和云端上传会直接复制这个 zip 文件，不再重新打包内部内容。
-- 恢复时会把下载或选中的备份 zip 写回到配置的 zip 路径。
-- 建议 Zip 模式的游戏只使用 Zip 存档单元；只有兼容旧配置时再混用 `Folder`、`File` 或 `WinRegistry`。
+- Folder 和 Zip 共用 `contents_only`：关闭时保留原有最外层文件夹名，开启时只使用这一层里的内容；不递归剥离业务子目录。
+- ZIP 上传、本地备份和恢复均按此开关整理层级，文件内容保持不变。恢复到 ZIP 时不保留内部存档单元编号或 `content` 包装。
+- 恢复时把整理后的 ZIP 写回配置路径。程序导出的 ZIP 保留布局信息，反复同步不会逐层剥掉 `1` 等游戏业务目录；切换开关也可以恢复原文件夹名。
+- 每台设备使用 ZIP 时只配置一个 ZIP 单元。其他设备可以使用关联的 Folder 单元；关联单元不会回退使用另一设备的路径。
+- 布局规则及旧备份兼容说明见 [`docs/ZIP_FOLDER_LAYOUT.md`](docs/ZIP_FOLDER_LAYOUT.md)。
 
 面向 AI 编程助手和后续维护者的实现说明见 [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md)。
 
 ## 推荐用法
+
+咩咩启示录旧版 PC 游戏可能不写入 `meta_N` 的 `SaveDate`，安卓游戏因此显示 0001 年。
+格式插件会在备份和恢复时，仅为缺失、无效或年份为 0001 的日期补入来源文件修改时间，
+保留已有有效日期和全部游戏进度。临时复制、格式转换和解压须保留文件时间；Android
+Shizuku 使用 `cp --preserve=timestamps`，避免把恢复时间误当成保存时间。
 
 - 优先使用 Avalonia 版本，它是当前主推版本，可独立创建和维护配置。
 - 只有当 Avalonia 无法运行或在目标环境启动过慢时，再尝试 Lazarus 版本。

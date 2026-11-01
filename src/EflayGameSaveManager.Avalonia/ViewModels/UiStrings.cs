@@ -8,6 +8,8 @@ public sealed class UiStrings
     private UiStrings(bool english)
     {
         WindowTitle = "Eflay Game Save Manager";
+        BackupDescription = english ? "Backup description (leave empty to clear)" : "存档描述（留空可清除）";
+        SaveBackupDescription = english ? "Save description" : "保存描述";
         AppName = "Eflay Game Save Manager";
         ToggleInfo = english ? "Toggle Info" : "展开信息";
         RefreshCloud = english ? "Refresh Cloud" : "刷新云端";
@@ -25,7 +27,7 @@ public sealed class UiStrings
         AddZipSave = english ? "Add Zip Save" : "添加 Zip 存档";
         ResetForm = english ? "Reset Form" : "重置表单";
         SyncCurrentSave = english ? "Sync Current Save To Cloud" : "同步当前存档到云端";
-        RestoreFromCloud = english ? "Restore From Cloud" : "从云端恢复";
+        RestoreFromCloud = english ? "Restore Latest Cloud Save" : "恢复云端最新存档";
         RunGame = english ? "Run Game" : "启动游戏";
         OpenGameFolder = english ? "Open Game Folder" : "打开游戏目录";
         SaveDeviceSettings = english ? "Save Current Device Settings" : "保存当前设备设置";
@@ -86,10 +88,22 @@ public sealed class UiStrings
             ? "Semicolon-separated wildcards for device-local files, e.g. settings*; Prefs.dict. Matching files are never packed on backup and never overwritten on restore."
             : "分号分隔的通配符，用于设备本地文件，例如 settings*; Prefs.dict。匹配的文件备份时不打包、恢复时不覆盖。";
         ExcludePatternsWatermark = english ? "e.g. settings*; Prefs.dict" : "例如 settings*; Prefs.dict";
-        ContentsOnly = english ? "Sync folder contents only" : "只同步文件夹内容";
+        ContentsOnly = english ? "Contents only (Folder / ZIP)" : "只同步文件夹内容（Folder / ZIP）";
         ContentsOnlyHint = english
-            ? "Ignores the folder's own name so devices with different directory names still line up (e.g. PC \"saves\" vs Android \"user\")."
-            : "忽略文件夹自身名称，两边目录名不同也能对齐（例如 PC 的 saves 与手机的 user）。";
+            ? "On: use the contents without the outer folder. Off: retain its name. ZIP uses the same rule; only one outer layer is removed."
+            : "开启：只使用内容，不带最外层文件夹；关闭：保留文件夹名。ZIP 使用相同规则，只处理一层，不递归剥离。";
+        BuiltInTools = english ? "Built-in Save Tools" : "内置存档工具";
+        NfsPersonal = english ? "Personal" : "个人";
+        NfsPersonalHint = english ? "Choose a profile to edit its alias, money, and total bounty. You can also apply the reference editor's Boss Ready progress for the save's current Blacklist stage to satisfy its race and milestone requirements. Existing cars, profile details, and higher earned bounty are preserved; a backup is created before writing." : "选择个人存档后可修改档案名、金钱和个人总赏金；也可按存档当前黑名单阶段套用参考修改器的“Boss 战可挑战”进度，满足该阶段的比赛和里程碑条件。保留现有车辆、档案信息和更高的已获赏金；写入前自动创建备份。";
+        LoadProfile = english ? "Read Current Save" : "读取当前存档";
+        ProfileAlias = english ? "Profile name" : "档案名";
+        ProfileMoney = english ? "Money" : "金钱";
+        SaveProfile = english ? "Save Changes + Backup" : "保存修改并备份";
+        SelectNfsProfile = english ? "Save profile" : "个人存档";
+        ProfileTotalBounty = english ? "Total bounty" : "个人总赏金";
+        ProfileBlacklistStage = english ? "Current Blacklist stage:" : "当前黑名单阶段：";
+        MakeBossReady = english ? "Meet Race + Milestone Requirements" : "满足比赛和里程碑条件";
+        BossReadyApplied = english ? "Boss Ready progress applied for Blacklist stage" : "已套用该黑名单阶段的可挑战进度：";
     }
 
     public string WindowTitle { get; }
@@ -169,6 +183,20 @@ public sealed class UiStrings
     public string ExcludePatternsWatermark { get; }
     public string ContentsOnly { get; }
     public string ContentsOnlyHint { get; }
+    public string BuiltInTools { get; }
+    public string NfsPersonal { get; }
+    public string NfsPersonalHint { get; }
+    public string LoadProfile { get; }
+    public string ProfileAlias { get; }
+    public string ProfileMoney { get; }
+    public string SaveProfile { get; }
+    public string SelectNfsProfile { get; }
+    public string ProfileTotalBounty { get; }
+    public string ProfileBlacklistStage { get; }
+    public string MakeBossReady { get; }
+    public string BossReadyApplied { get; }
+    public string BackupDescription { get; }
+    public string SaveBackupDescription { get; }
 
     public static UiStrings Create(string language) =>
         new(string.Equals(language, AppLanguage.English, StringComparison.OrdinalIgnoreCase));

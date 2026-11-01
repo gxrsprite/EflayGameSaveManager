@@ -5,6 +5,85 @@ namespace EflayGameSaveManager.Maui.Services;
 
 public sealed class StoragePickerService
 {
+    public async Task<StorageSelectionResult> PickCustomPathAsync(string initialPath, bool folder, bool zip = false)
+    {
+        var page = Application.Current?.Windows.FirstOrDefault(window => window.Page is not null)?.Page
+            ?? throw new InvalidOperationException("当前窗口尚未准备就绪。");
+        var picker = new CustomPathPage(initialPath, folder, zip);
+        await page.Navigation.PushModalAsync(picker);
+        return await picker.Result;
+    }
+
+    public async Task<StorageSelectionResult> PickConfiguredZipAsync()
+    {
+#if ANDROID
+        try
+        {
+            var uri = await Platforms.Android.ZipDocumentAccess.PickAsync();
+            return uri is null ? StorageSelectionResult.Cancelled("已取消 ZIP 文件选择。")
+                : StorageSelectionResult.Success(uri, "已选择 ZIP 文件，将使用原文件进行备份和恢复。");
+        }
+        catch (Exception ex) { return StorageSelectionResult.Cancelled(ex.Message); }
+#else
+        return await PickZipFileAsync();
+#endif
+    }
+
+    public async Task CopyConfiguredZipToLocalAsync(string path, string localPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
+#if ANDROID
+        if (path.StartsWith("content://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var uri = global::Android.Net.Uri.Parse(path)!;
+            await using var input = global::Android.App.Application.Context.ContentResolver!.OpenInputStream(uri)
+                ?? throw new IOException("无法读取所选 ZIP 文件，请重新选择并授权。");
+            await using var output = File.Create(localPath);
+            await input.CopyToAsync(output);
+            return;
+        }
+        if (Platforms.Android.ShizukuFileService.IsRestrictedPath(path))
+        {
+            var stagingRoot = Path.Combine(Path.GetDirectoryName(localPath)!, "restricted-source");
+            try
+            {
+                var staged = await Platforms.Android.ShizukuFileService.CopyFromRestrictedAsync(path, stagingRoot)
+                    ?? throw new IOException("无法读取 ZIP 文件。" + Platforms.Android.ShizukuFileService.StatusMessage);
+                File.Copy(staged, localPath, true);
+            }
+            finally { if (Directory.Exists(stagingRoot)) Directory.Delete(stagingRoot, true); }
+            return;
+        }
+#endif
+        File.Copy(path, localPath, true);
+    }
+
+    public async Task WriteConfiguredZipAsync(string source, string path)
+    {
+        // Preserve the previous archive before replacing a configured document.
+        var backup = Path.Combine(FileSystem.AppDataDirectory, "zip-before-restore", Guid.NewGuid().ToString("N"), "previous.zip");
+        await CopyConfiguredZipToLocalAsync(path, backup);
+#if ANDROID
+        if (path.StartsWith("content://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var uri = global::Android.Net.Uri.Parse(path)!;
+            await using var input = File.OpenRead(source);
+            await using var output = global::Android.App.Application.Context.ContentResolver!.OpenOutputStream(uri, "rwt")
+                ?? throw new IOException("所选 ZIP 文件无法写入，请重新选择可读写的文件。");
+            await input.CopyToAsync(output);
+            await output.FlushAsync();
+            return;
+        }
+        if (Platforms.Android.ShizukuFileService.IsRestrictedPath(path))
+        {
+            if (!await Platforms.Android.ShizukuFileService.CopyToRestrictedAsync(source, path))
+                throw new IOException("ZIP 恢复失败。" + Platforms.Android.ShizukuFileService.StatusMessage);
+            return;
+        }
+#endif
+        File.Copy(source, path, true);
+    }
+
     private static readonly FilePickerFileType ZipFileTypes = new(new Dictionary<DevicePlatform, IEnumerable<string>>
     {
         [DevicePlatform.Android] = ["application/zip", "application/x-zip-compressed", "*/*"],

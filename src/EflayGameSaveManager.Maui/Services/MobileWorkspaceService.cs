@@ -27,7 +27,7 @@ public sealed class MobileWorkspaceService
         }
 
         var config = await configurationService.LoadAsync(configPath, cancellationToken);
-        if (NormalizeConfig(config))
+        if (MobileConfigNormalizer.Normalize(config))
         {
             await configurationService.SaveAsync(configPath, config, cancellationToken);
         }
@@ -59,59 +59,4 @@ public sealed class MobileWorkspaceService
         }
     }
 
-    private static bool NormalizeConfig(ManagerConfig config)
-    {
-        var changed = false;
-
-        foreach (var game in config.Games)
-        {
-            var gameChanged = false;
-            var mergedUnits = new List<SaveUnitDefinition>();
-            foreach (var saveUnit in game.SavePaths.OrderBy(unit => unit.Id))
-            {
-                var compatibleUnit = mergedUnits.FirstOrDefault(existing =>
-                    existing.UnitType == saveUnit.UnitType &&
-                    existing.DeleteBeforeApply == saveUnit.DeleteBeforeApply &&
-                    !existing.Paths.Keys.Any(deviceId => saveUnit.Paths.ContainsKey(deviceId)));
-
-                if (compatibleUnit is null)
-                {
-                    mergedUnits.Add(CloneSaveUnit(saveUnit));
-                    continue;
-                }
-
-                foreach (var pair in saveUnit.Paths)
-                {
-                    compatibleUnit.Paths[pair.Key] = pair.Value;
-                }
-
-                gameChanged = true;
-            }
-
-            if (gameChanged)
-            {
-                for (var index = 0; index < mergedUnits.Count; index++)
-                {
-                    mergedUnits[index].Id = index;
-                }
-
-                game.SavePaths = mergedUnits;
-                game.NextSaveUnitId = mergedUnits.Count;
-                changed = true;
-            }
-        }
-
-        return changed;
-    }
-
-    private static SaveUnitDefinition CloneSaveUnit(SaveUnitDefinition saveUnit)
-    {
-        return new SaveUnitDefinition
-        {
-            Id = saveUnit.Id,
-            UnitType = saveUnit.UnitType,
-            DeleteBeforeApply = saveUnit.DeleteBeforeApply,
-            Paths = new Dictionary<string, string>(saveUnit.Paths, StringComparer.OrdinalIgnoreCase)
-        };
-    }
 }

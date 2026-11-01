@@ -1,0 +1,56 @@
+{
+  "version": "1.0.0",
+  "backup_path": "./save_data",
+  "games": [
+    {
+      "name": "Cult of the Lamb",
+      "chinese_name": "咩咩启示录",
+      "note": "公众配置模板。请核对自己的游戏版本和存档路径，并在两端填写自己的云存储。",
+      "save_paths": [
+        {
+          "id": 0,
+          "unit_type": "Folder",
+          "paths": {
+            "pc": "<winLocalAppDataLow>\\Massive Monster\\Cult Of The Lamb\\saves",
+            "android": "/storage/emulated/0/Android/data/com.cotl.port/files/user"
+          },
+          "delete_before_apply": false,
+          "contents_only": true,
+          "exclude": ["settings*", "Prefs.dict"],
+          "linked_unit_ids": []
+        }
+      ],
+      "game_paths": {},
+      "external_launchers": [],
+      "next_save_unit_id": 1,
+      "cloud_sync_enabled": false
+    }
+  ],
+  "settings": {
+    "locale": "zh_SIMPLIFIED",
+    "log_to_file": true,
+    "cloud_settings": {
+      "always_sync": false,
+      "auto_sync_interval": 0,
+      "root_path": "cotl-public",
+      "backend": {
+        "type": "S3",
+        "endpoint": "",
+        "bucket": "",
+        "region": "us-east-1",
+        "access_key_id": "",
+        "secret_access_key": ""
+      },
+      "max_concurrency": 1
+    }
+  },
+  "favorites": [],
+  "quick_action": {
+    "quick_action_game": null,
+    "hotkeys": {"apply": ["", "", ""], "backup": ["", "", ""]}
+  },
+  "devices": {
+    "pc": {"id": "pc", "name": "PC", "platform": "windows"},
+    "android": {"id": "android", "name": "Android", "platform": "android"}
+  }
+}

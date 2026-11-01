@@ -15,6 +15,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+data class CloudBackupRow(val backup: CloudGameBackup, val deviceName: String)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
@@ -25,6 +27,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val workspaceService = WorkspaceService(application)
     private val s3CloudService = S3CloudService()
     private val archiveService = ArchiveService()
+    private val nfsEditor = NfsMwSaveService(application)
     private var currentConfig: ManagerConfig? = null
     private var currentSnapshot: AppSnapshot? = null
     private var configPath: String = ""
@@ -42,6 +45,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val selectedGameSummary: String = "Cloud sync and backup details will show here.",
         val selectedGameDetails: String = "No game selected.",
         val cloudDetails: String = "Cloud status not loaded.",
+        val cloudBackups: List<CloudBackupRow> = emptyList(),
+        val selectedCloudBackup: CloudBackupRow? = null,
+        val cloudBackupDescription: String = "",
+        val configRevision: Int = 0,
+        val isNfs9: Boolean = false,
+        val nfsProfiles: List<NfsProfileChoice> = emptyList(),
+        val selectedNfsProfile: NfsProfileChoice? = null,
+        val nfsLoaded: Boolean = false,
+        val nfsAlias: String = "",
+        val nfsMoney: String = "",
+        val nfsBounty: String = "",
+        val nfsStage: String = "",
+        val nfsStatus: String = "请选择并读取个人存档。",
         val isBusy: Boolean = false,
         val isAddGameVisible: Boolean = false,
         val addGameName: String = "",
@@ -159,6 +175,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "${game.saveUnits.count { it.unitType == SaveUnitType.File }} file",
             selectedGameDetails = details,
             cloudDetails = "Cloud status not loaded.",
+            cloudBackups = emptyList(), selectedCloudBackup = null, cloudBackupDescription = "",
+            isNfs9 = game.name.equals("NFS9", true) || game.name.contains("极品飞车9", true) || game.name.contains("NFS MW 2005", true) || (gameDef?.chinese_name?.contains("极品飞车9") == true),
+            nfsProfiles = emptyList(), selectedNfsProfile = null, nfsLoaded = false, nfsStage = "", nfsStatus = "请选择并读取个人存档。",
             saveUnitTargets = targets,
             selectedSaveUnitTarget = currentPath?.let { cp ->
                 targets.firstOrNull { !it.isNew && it.saveUnitId == cp.saveUnitId }
@@ -454,10 +473,84 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val status = s3CloudService.getGameStatus(game, snapshot.currentDevice, cloudSettings)
         val backups = s3CloudService.listGameBackups(game, snapshot.currentDevice, cloudSettings)
+        if (_uiState.value.selectedGame?.name != game.name) return
+        val rows = backups.map { CloudBackupRow(it, currentConfig?.devices?.get(it.deviceId)?.name?.ifBlank { it.deviceId } ?: it.deviceId) }
         _uiState.value = _uiState.value.copy(
             cloudDetails = buildCloudDetails(status, backups),
+            cloudBackups = rows,
+            selectedCloudBackup = null,
+            cloudBackupDescription = "",
             statusMessage = "Cloud status refreshed for ${game.name}."
         )
+    }
+
+    fun selectCloudBackup(row: CloudBackupRow) {
+        _uiState.value = _uiState.value.copy(selectedCloudBackup = row, cloudBackupDescription = row.backup.describe)
+    }
+
+    fun updateCloudBackupDescription(value: String) { _uiState.value = _uiState.value.copy(cloudBackupDescription = value) }
+
+    fun saveCloudBackupDescription() {
+        val ctx = getCloudContext() ?: return
+        val selected = _uiState.value.selectedCloudBackup ?: return
+        val description = _uiState.value.cloudBackupDescription
+        viewModelScope.launch {
+            runBusy("正在保存存档描述...") {
+                s3CloudService.updateBackupDescription(ctx.game, ctx.cloudSettings, selected.backup.date, selected.backup.deviceId, description)
+                refreshCloudCore(ctx.game, ctx.snapshot, ctx.cloudSettings)
+                _uiState.value.cloudBackups.firstOrNull { it.backup.date == selected.backup.date && it.backup.deviceId.equals(selected.backup.deviceId, true) }?.let { selectCloudBackup(it) }
+                setStatus("存档描述已保存。")
+            }
+        }
+    }
+
+    fun findNfsProfiles() {
+        val game = _uiState.value.selectedGame ?: return
+        val snapshot = currentSnapshot ?: return
+        val definition = currentConfig?.games?.firstOrNull { it.name == game.name } ?: return
+        val paths = definition.save_paths.filter { it.unit_type == SaveUnitType.File || it.unit_type == SaveUnitType.Folder }
+            .mapNotNull { it.paths[snapshot.currentDevice.deviceId]?.takeIf(String::isNotBlank) }
+        viewModelScope.launch { runBusy("正在查找 NFS9 个人存档...") {
+            val profiles = withContext(Dispatchers.IO) { nfsEditor.list(paths) }
+            if (_uiState.value.selectedGame?.name != game.name) return@runBusy
+            _uiState.value = _uiState.value.copy(nfsProfiles = profiles, selectedNfsProfile = null, nfsLoaded = false,
+                nfsStatus = if (profiles.isEmpty()) "未找到可识别的 PC 版 NFS9 个人存档，请检查安卓路径。" else "找到 ${profiles.size} 个存档，请选择后读取。")
+        } }
+    }
+    fun selectNfsProfile(profile: NfsProfileChoice) { _uiState.value = _uiState.value.copy(selectedNfsProfile = profile, nfsLoaded = false) }
+    fun updateNfsAlias(value: String) { _uiState.value = _uiState.value.copy(nfsAlias = value) }
+    fun updateNfsMoney(value: String) { _uiState.value = _uiState.value.copy(nfsMoney = value) }
+    fun updateNfsBounty(value: String) { _uiState.value = _uiState.value.copy(nfsBounty = value) }
+    private fun showNfsProfile(profile: NfsProfile, message: String) {
+        _uiState.value = _uiState.value.copy(nfsAlias = profile.alias, nfsMoney = profile.money.toString(), nfsBounty = profile.bounty.toString(),
+            nfsStage = if (profile.stage in 1..15) "#${profile.stage}" else "未知", nfsLoaded = true, nfsStatus = message)
+    }
+    fun readNfsProfile() {
+        val selected = _uiState.value.selectedNfsProfile ?: run { setStatus("请先选择个人存档。"); return }
+        viewModelScope.launch { runBusy("正在读取个人存档...") {
+            val profile = withContext(Dispatchers.IO) { nfsEditor.read(selected.path) }
+            if (_uiState.value.selectedNfsProfile == selected) showNfsProfile(profile, "当前存档：${selected.path}")
+        } }
+    }
+    fun saveNfsProfile() {
+        val state = _uiState.value
+        val selected = state.selectedNfsProfile ?: return
+        if (!state.nfsLoaded) return
+        val money = state.nfsMoney.toLongOrNull()
+        val bounty = state.nfsBounty.toLongOrNull()
+        if (money == null || bounty == null) { setStatus("金钱和赏金请输入有效的非负整数。"); return }
+        viewModelScope.launch { runBusy("正在备份并保存个人存档...") {
+            val profile = withContext(Dispatchers.IO) { nfsEditor.save(selected.path, state.nfsAlias, money, bounty) }
+            if (_uiState.value.selectedNfsProfile == selected) showNfsProfile(profile, "已保存，原存档已备份。")
+        } }
+    }
+    fun makeNfsBossReady() {
+        val selected = _uiState.value.selectedNfsProfile ?: return
+        if (!_uiState.value.nfsLoaded) return
+        viewModelScope.launch { runBusy("正在备份并设置黑名单挑战条件...") {
+            val profile = withContext(Dispatchers.IO) { nfsEditor.bossReady(selected.path) }
+            if (_uiState.value.selectedNfsProfile == selected) showNfsProfile(profile, "已套用当前黑名单可挑战进度，原存档已备份。")
+        } }
     }
 
     fun uploadCurrent() {
@@ -670,12 +763,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         ?: throw IllegalStateException("Cannot open file")
                     val content = stream.bufferedReader().readText()
                     stream.close()
+                    val existing = File(configPath)
+                    if (existing.exists()) {
+                        val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.US).format(java.util.Date())
+                        existing.copyTo(File("$configPath.bak_$stamp"), overwrite = false)
+                    }
                     configService.saveConfigRaw(configPath, content)
                     reloadCore()
+                    _uiState.value = _uiState.value.copy(configRevision = _uiState.value.configRevision + 1)
                     setStatus("Config imported successfully.")
                 } catch (e: Exception) {
                     setStatus("Import failed: ${e.message}")
                 }
+            }
+        }
+    }
+
+    fun importMauiConfiguration() {
+        viewModelScope.launch {
+            runBusy("正在读取 MAUI 当前配置...") {
+                if (!ShizukuHelper.isAvailable() || !ShizukuHelper.isRoot())
+                    throw IllegalStateException("读取 MAUI 私有目录需要已授权的 root 模式 Shizuku；也可先导出配置文件再用导入按钮选择。")
+                val source = "/data/user/0/com.eflay.gamesavemanager.maui/files/GameSaveManager.config.json"
+                val read = withContext(Dispatchers.IO) { ShizukuHelper.runShell("cat ${ShizukuHelper.escapeShell(source)}") }
+                if (!read.success || read.output.isBlank()) throw IllegalStateException("无法读取已安装 MAUI 版的配置，请确认应用已安装并启动过。")
+                val original = File(configPath)
+                if (original.exists()) {
+                    val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.US).format(java.util.Date())
+                    original.copyTo(File("$configPath.bak_$stamp"), overwrite = false)
+                }
+                configService.saveConfigRaw(configPath, read.output)
+                reloadCore()
+                _uiState.value = _uiState.value.copy(configRevision = _uiState.value.configRevision + 1)
+                setStatus("已导入 MAUI 当前配置，原 Kotlin 配置已备份。")
             }
         }
     }

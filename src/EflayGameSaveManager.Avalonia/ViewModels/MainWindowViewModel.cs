@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -21,6 +21,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly LocalSaveService _localSaveService;
     private readonly IPathPickerService _pathPickerService;
     private readonly SaveMigrationService _migrationService;
+    private readonly NfsMwPersonalSaveEditor _nfsMwPersonalSaveEditor = new();
     private readonly EnvironmentTokenResolver _pathResolver = new();
     private readonly AppRuntimeSettingsService _runtimeSettingsService = new();
 
@@ -66,6 +67,30 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _hasSelectedGame;
+
+    [ObservableProperty]
+    private bool _isNfsMwSelected;
+
+    [ObservableProperty]
+    private string _nfsProfileAlias = string.Empty;
+
+    [ObservableProperty]
+    private string _nfsProfileMoney = string.Empty;
+
+    [ObservableProperty]
+    private string _nfsProfileBounty = string.Empty;
+
+    [ObservableProperty]
+    private string _nfsProfileBlacklistStage = string.Empty;
+
+    [ObservableProperty]
+    private string _nfsProfileStatus = string.Empty;
+
+    [ObservableProperty]
+    private bool _canSaveNfsProfile;
+
+    [ObservableProperty]
+    private NfsMwPersonalProfile? _selectedNfsSaveChoice;
 
     [ObservableProperty]
     private bool _isGameListView = true;
@@ -196,6 +221,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<LocalBackupItemViewModel> LocalBackups { get; } = [];
     public ObservableCollection<AddGameSaveUnitEditorViewModel> AddGameSaveUnits { get; } = [];
     public ObservableCollection<ExternalLauncherEditorViewModel> CurrentDeviceExternalLaunchers { get; } = [];
+    public ObservableCollection<NfsMwPersonalProfile> NfsSaveChoices { get; } = [];
     public ObservableCollection<LanguageOptionViewModel> LanguageOptions { get; } =
     [
         new(AppLanguage.Chinese, "中文"),
@@ -228,12 +254,68 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnSelectedCloudBackupChanged(CloudBackupItemViewModel? value)
     {
         HasSelectedCloudBackup = value is not null;
+        CloudBackupDescription = value?.Describe ?? string.Empty;
         _pendingCloudBackupOverwritePath = null;
+    }
+
+    partial void OnSelectedNfsSaveChoiceChanged(NfsMwPersonalProfile? value)
+    {
+        CanSaveNfsProfile = false;
+        NfsProfileAlias = string.Empty;
+        NfsProfileMoney = string.Empty;
+        NfsProfileBounty = string.Empty;
     }
 
     partial void OnSelectedLocalBackupChanged(LocalBackupItemViewModel? value)
     {
         HasSelectedLocalBackup = value is not null;
+        LocalBackupDescription = value?.Describe ?? string.Empty;
+    }
+
+    [ObservableProperty]
+    private string _cloudBackupDescription = string.Empty;
+
+    [ObservableProperty]
+    private string _localBackupDescription = string.Empty;
+
+    [RelayCommand]
+    private async Task SaveCloudBackupDescriptionAsync()
+    {
+        var backup = SelectedCloudBackup;
+        if (backup is null || !TryGetSelectedCloudContext(out var game, out _, out _, out var settings))
+            return;
+        var description = CloudBackupDescription;
+        await RunBusyAsync("Saving cloud backup description...", async () =>
+        {
+            await _cloudSyncService.UpdateGameBackupDescriptionAsync(game, settings, backup.Date, backup.DeviceId, description);
+            if (SelectedGame?.Name == game.Name)
+            {
+                await RefreshSelectedGameCloudStatusAsync(forceReload: true);
+                SelectedCloudBackup = CloudBackups.FirstOrDefault(item => item.Date == backup.Date && item.DeviceId == backup.DeviceId);
+            }
+            StatusMessage = "Cloud backup description saved.";
+        });
+    }
+
+    [RelayCommand]
+    private async Task SaveLocalBackupDescriptionAsync()
+    {
+        var backup = SelectedLocalBackup;
+        var snapshot = _currentSnapshot;
+        var gameName = SelectedGame?.Name;
+        if (backup is null || snapshot is null || gameName is null)
+            return;
+        var description = LocalBackupDescription;
+        await RunBusyAsync("Saving local backup description...", async () =>
+        {
+            await _localSaveService.UpdateBackupDescriptionAsync(gameName, snapshot.BackupRoot, backup.Date, backup.DeviceId, description);
+            if (SelectedGame?.Name == gameName)
+            {
+                await RefreshLocalBackupsAsync();
+                SelectedLocalBackup = LocalBackups.FirstOrDefault(item => item.Date == backup.Date && item.DeviceId == backup.DeviceId);
+            }
+            StatusMessage = "Local backup description saved.";
+        });
     }
 
     partial void OnAddGameNameChanged(string value)
@@ -753,19 +835,135 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
         AppLogger.Info(
-            $"UI restore-current requested: game={game.Name}, device={snapshot.CurrentDevice.DeviceName}[{snapshot.CurrentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
+            $"UI restore-latest requested: game={game.Name}, device={snapshot.CurrentDevice.DeviceName}[{snapshot.CurrentDevice.DeviceId}], endpoint={cloudSettings.Backend.Endpoint}, bucket={cloudSettings.Backend.Bucket}, root={cloudSettings.RootPath}");
 
         await RunBusyAsync(
-            $"Restoring cloud save for {game.Name}...",
+            $"Restoring latest cloud save for {game.Name}...",
             async () =>
             {
-                var result = await _cloudSyncService.RestoreGameCurrentSaveAsync(game, snapshot.CurrentDevice, cloudSettings);
+                var result = await _cloudSyncService.RestoreGameLatestSaveAsync(game, snapshot.CurrentDevice, cloudSettings);
                 CloudSummary =
                     $"Downloaded compressed save from {config.Settings.CloudSettings.Backend.Bucket}/{result.RootKey}";
-                StatusMessage = $"Restored latest cloud save for {game.Name}.";
+                StatusMessage = $"Restored latest cloud backup {Path.GetFileNameWithoutExtension(result.RootKey)} for {game.Name}.";
                 await RefreshSelectedGameCloudStatusAsync(forceReload: true);
             });
     }
+
+    [RelayCommand]
+    private void LoadNfsPersonalProfile()
+    {
+        if (SelectedNfsSaveChoice is null || string.IsNullOrWhiteSpace(SelectedNfsSaveChoice.SavePath))
+        {
+            NfsProfileStatus = "请先选择个人存档。";
+            return;
+        }
+        var path = SelectedNfsSaveChoice.SavePath;
+        CanSaveNfsProfile = false;
+        try
+        {
+            var profile = _nfsMwPersonalSaveEditor.Load(path);
+            NfsProfileAlias = profile.Alias;
+            NfsProfileMoney = profile.Money.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            NfsProfileBounty = profile.TotalBounty.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            NfsProfileBlacklistStage = profile.CurrentBlacklistStage is >= 1 and <= 15 ? $"#{profile.CurrentBlacklistStage}" : "未知";
+            NfsProfileStatus = $"当前存档：{profile.SavePath}";
+            CanSaveNfsProfile = true;
+        }
+        catch (Exception ex)
+        {
+            NfsProfileStatus = ex.Message;
+            AppLogger.Error($"Failed to read NFS MW profile from {path}", ex);
+        }
+    }
+
+    [RelayCommand]
+    private void SaveNfsPersonalProfile()
+    {
+        if (!CanSaveNfsProfile || SelectedNfsSaveChoice is null || string.IsNullOrWhiteSpace(SelectedNfsSaveChoice.SavePath)) return;
+        var path = SelectedNfsSaveChoice.SavePath;
+        if (!uint.TryParse(NfsProfileMoney, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var money))
+        {
+            NfsProfileStatus = "金钱请输入 0 到 4294967295 之间的整数。";
+            return;
+        }
+        if (!ulong.TryParse(NfsProfileBounty, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var totalBounty))
+        {
+            NfsProfileStatus = "个人总赏金请输入非负整数。";
+            return;
+        }
+        try
+        {
+            var profile = _nfsMwPersonalSaveEditor.Save(path, NfsProfileAlias, money, totalBounty);
+            SelectedNfsSaveChoice = profile;
+            NfsProfileAlias = profile.Alias;
+            NfsProfileMoney = profile.Money.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            NfsProfileBounty = profile.TotalBounty.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            NfsProfileBlacklistStage = profile.CurrentBlacklistStage is >= 1 and <= 15 ? $"#{profile.CurrentBlacklistStage}" : "未知";
+            NfsProfileStatus = $"已保存并创建备份：{profile.SavePath}.bak_…";
+            StatusMessage = "NFS MW 个人档案已保存，原存档已备份。";
+            CanSaveNfsProfile = true;
+        }
+        catch (Exception ex)
+        {
+            NfsProfileStatus = ex.Message;
+            AppLogger.Error($"Failed to save NFS MW profile to {path}", ex);
+        }
+    }
+
+    [RelayCommand]
+    private void MakeNfsProfileBossReady()
+    {
+        if (!CanSaveNfsProfile || SelectedNfsSaveChoice is null || string.IsNullOrWhiteSpace(SelectedNfsSaveChoice.SavePath)) return;
+        var path = SelectedNfsSaveChoice.SavePath;
+        try
+        {
+            var profile = _nfsMwPersonalSaveEditor.ApplyBossFightReady(path);
+            SelectedNfsSaveChoice = profile;
+            NfsProfileAlias = profile.Alias;
+            NfsProfileMoney = profile.Money.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            NfsProfileBounty = profile.TotalBounty.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            NfsProfileBlacklistStage = $"#{profile.CurrentBlacklistStage}";
+            NfsProfileStatus = $"{Strings.BossReadyApplied} #{profile.CurrentBlacklistStage}；已创建备份。";
+            StatusMessage = "NFS MW 黑名单挑战条件已满足，原存档已备份。";
+            CanSaveNfsProfile = true;
+        }
+        catch (Exception ex)
+        {
+            NfsProfileStatus = ex.Message;
+            AppLogger.Error($"Failed to apply NFS MW Boss Ready progress to {path}", ex);
+        }
+    }
+
+    private bool TryGetNfsMwSavePath(out string path)
+    {
+        path = string.Empty;
+        if (_currentSnapshot is null || SelectedGame is null)
+        {
+            NfsProfileStatus = "请先选择 NFS MW 游戏。";
+            return false;
+        }
+        var game = _currentSnapshot.Games.FirstOrDefault(item => string.Equals(item.Name, SelectedGame.Name, StringComparison.Ordinal));
+        if (game is null || !IsNfsMwGame(game))
+        {
+            NfsProfileStatus = "当前所选游戏没有 NFS MW 内置工具。";
+            return false;
+        }
+        var saveUnit = game.CurrentDevicePaths.FirstOrDefault(item => item.UnitType is SaveUnitType.Folder or SaveUnitType.File);
+        if (saveUnit is null)
+        {
+            NfsProfileStatus = "当前设备没有配置 Folder 或 File 类型的存档路径。";
+            return false;
+        }
+        path = saveUnit.Path;
+        return true;
+    }
+
+    private static bool IsNfsMwGame(GameSnapshot game) =>
+        string.Equals(game.Name, "NFS9", StringComparison.OrdinalIgnoreCase) ||
+        game.Name.Contains("NFS MW 2005", StringComparison.OrdinalIgnoreCase) ||
+        game.Name.Contains("极品飞车9", StringComparison.OrdinalIgnoreCase) ||
+        game.ChineseName.Contains("极品飞车9", StringComparison.OrdinalIgnoreCase) ||
+        game.ChineseName.Contains("Most Wanted (2005)", StringComparison.OrdinalIgnoreCase);
 
     [RelayCommand]
     private async Task DownloadSelectedCloudBackupZipAsync()
@@ -928,6 +1126,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var game = _currentSnapshot.Games.First(item => string.Equals(item.Name, SelectedGame.Name, StringComparison.Ordinal));
         var backups = await _localSaveService.ListBackupsAsync(game.Name, _currentSnapshot.BackupRoot, _currentSnapshot.CurrentDevice);
+        if (SelectedGame?.Name != game.Name) return;
 
         LocalBackups.Clear();
         foreach (var backup in backups)
@@ -1005,6 +1204,15 @@ public partial class MainWindowViewModel : ViewModelBase
         if (_currentSnapshot is null || selectedGame is null)
         {
             HasSelectedGame = false;
+            IsNfsMwSelected = false;
+            CanSaveNfsProfile = false;
+            NfsSaveChoices.Clear();
+            SelectedNfsSaveChoice = null;
+            NfsProfileAlias = string.Empty;
+            NfsProfileMoney = string.Empty;
+            NfsProfileBounty = string.Empty;
+            NfsProfileBlacklistStage = string.Empty;
+            NfsProfileStatus = string.Empty;
             SelectedGameName = Strings.SelectGame;
             SelectedGameNote = string.Empty;
             HasSelectedGameNote = false;
@@ -1021,6 +1229,35 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         var game = _currentSnapshot.Games.First(item => string.Equals(item.Name, selectedGame.Name, StringComparison.Ordinal));
+        IsNfsMwSelected = IsNfsMwGame(game);
+        CanSaveNfsProfile = false;
+        NfsSaveChoices.Clear();
+        SelectedNfsSaveChoice = null;
+        NfsProfileAlias = string.Empty;
+        NfsProfileMoney = string.Empty;
+        NfsProfileBounty = string.Empty;
+        NfsProfileBlacklistStage = string.Empty;
+        NfsProfileStatus = IsNfsMwSelected ? "请选择个人存档，然后读取。" : string.Empty;
+        if (IsNfsMwSelected)
+        {
+            var savePath = game.CurrentDevicePaths.FirstOrDefault(item => item.UnitType is SaveUnitType.Folder or SaveUnitType.File)?.Path;
+            if (!string.IsNullOrWhiteSpace(savePath))
+            {
+                try
+                {
+                    NfsSaveChoices.Add(new NfsMwPersonalProfile(string.Empty, "请选择个人档案", string.Empty, 0, 0, 0));
+                    foreach (var profile in _nfsMwPersonalSaveEditor.ListProfiles(savePath)) NfsSaveChoices.Add(profile);
+                    var profileCount = Math.Max(0, NfsSaveChoices.Count - 1);
+                    NfsProfileStatus = profileCount == 0
+                        ? "当前存档目录中没有找到可识别的 NFS Most Wanted PC 个人存档。"
+                        : $"找到 {profileCount} 个个人存档，请选择后读取。";
+                }
+                catch (Exception ex)
+                {
+                    NfsProfileStatus = ex.Message;
+                }
+            }
+        }
         ApplySelectedGameSnapshot(game);
         await RefreshSelectedGameCloudStatusAsync(forceReload: false);
         await RefreshLocalBackupsAsync();
@@ -1303,6 +1540,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var status = await _cloudSyncService.GetGameCurrentStatusAsync(game, snapshot.CurrentDevice, cloudSettings);
         var backups = await _cloudSyncService.ListGameBackupsAsync(game, snapshot.CurrentDevice, cloudSettings);
+        if (SelectedGame?.Name != game.Name) return;
         SelectedGameCloudAvailable = status.IsAvailable;
         SelectedGameCloudState = status.IsAvailable
             ? $"Cloud backups across devices: {status.BackupCount}, current device head: {status.CurrentHead ?? "not found"}"
@@ -1699,7 +1937,7 @@ public sealed class CloudBackupItemViewModel
     public CloudBackupItemViewModel(CloudGameBackup backup, string deviceName)
     {
         Date = backup.Date;
-        Describe = string.IsNullOrWhiteSpace(backup.Describe) ? "-" : backup.Describe;
+        Describe = backup.Describe ?? string.Empty;
         Path = backup.Path;
         DeviceId = backup.DeviceId;
         DeviceName = deviceName;
@@ -1760,7 +1998,7 @@ public sealed class LocalBackupItemViewModel
     public LocalBackupItemViewModel(LocalGameBackup backup, string deviceName)
     {
         Date = backup.Date;
-        Describe = string.IsNullOrWhiteSpace(backup.Describe) ? "-" : backup.Describe;
+        Describe = backup.Describe ?? string.Empty;
         Path = backup.Path;
         DeviceId = backup.DeviceId;
         DeviceName = deviceName;

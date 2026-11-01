@@ -365,6 +365,24 @@ public sealed class CloudSyncService
         return DownloadGameBackupArchiveAsync(game, cloudSettings, backupDate, null, destinationPath, overwrite, cancellationToken);
     }
 
+    public async Task UpdateGameBackupDescriptionAsync(
+        GameSnapshot game,
+        CloudSettings cloudSettings,
+        string backupDate,
+        string deviceId,
+        string? description,
+        CancellationToken cancellationToken = default)
+    {
+        var manifest = await TryLoadGameBackupsAsync(game.Name, cloudSettings, cancellationToken)
+            ?? throw new InvalidOperationException($"No cloud backups found for '{game.Name}'.");
+        var updated = BackupDescriptionEditor.Update(manifest, backupDate, deviceId, description);
+        await _storageClient.UploadUtf8JsonAsync(
+            cloudSettings.Backend,
+            CloudStoragePathHelper.CombineKey(GetGameRootKey(cloudSettings, game.Name), "Backups.json"),
+            JsonSerializer.Serialize(updated, CloudJsonSerializerContext.LegacyGameBackups),
+            cancellationToken);
+    }
+
     public async Task DeleteGameBackupAsync(
         GameSnapshot game,
         CurrentDeviceContext currentDevice,

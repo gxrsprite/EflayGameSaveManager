@@ -9,6 +9,8 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <IsAotCompatible>true</IsAotCompatible>
+    <BundledConfigPath Condition="'$(BundledConfigPath)' == ''">..\..\GameSaveManager.config.json</BundledConfigPath>
+    <BundledRuntimePath Condition="'$(BundledRuntimePath)' == ''">..\..\GameSaveManager.runtime.json</BundledRuntimePath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PublishAot)' == 'true'">
@@ -27,10 +29,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\GameSaveManager.config.json" Link="GameSaveManager.config.json">
+    <None Include="$(BundledConfigPath)" Link="GameSaveManager.config.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\GameSaveManager.runtime.json" Link="GameSaveManager.runtime.json">
+    <None Include="$(BundledRuntimePath)" Link="GameSaveManager.runtime.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
